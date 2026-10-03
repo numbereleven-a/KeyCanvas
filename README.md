@@ -26,7 +26,7 @@ system keyboard shortcuts while active. Use it with adult supervision.
 
 ## Controls
 
-**Show shortcut hints at startup** is **off by default**. When enabled, large
+**Show shortcut hints at startup** is **on by default**. Large
 shortcut hints appear at startup and fade out within **five seconds**.
 
 | Input | Action |

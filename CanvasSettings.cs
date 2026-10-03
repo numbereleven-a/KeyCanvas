@@ -24,7 +24,7 @@ internal sealed record CanvasSettings
     public bool ReactToRhythm { get; init; } = true;
     public bool ShowFrameTiming { get; init; }
     public bool ShowFps { get; init; }
-    public bool ShowStartupHints { get; init; }
+    public bool ShowStartupHints { get; init; } = true;
     public bool SoundsEnabled { get; init; } = true;
     public SoundStyle Sound { get; init; } = SoundStyle.Bells;
     public int SoundVolumePercent { get; init; } = 15;

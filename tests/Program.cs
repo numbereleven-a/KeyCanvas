@@ -491,7 +491,7 @@ internal static class Program
             CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-FR");
             var defaults = new CanvasSettings();
             Check(defaults.Language == AppLanguage.English && defaults.ObjectLimit == 500 &&
-                defaults.FigureLifetimeSeconds == 5 && !defaults.ShowFps && !defaults.ShowFrameTiming && !defaults.ShowStartupHints &&
+                defaults.FigureLifetimeSeconds == 5 && !defaults.ShowFps && !defaults.ShowFrameTiming && defaults.ShowStartupHints &&
                 defaults.SoundsEnabled && defaults.Sound == SoundStyle.Bells && defaults.SoundVolumePercent == 15,
                 "Other Windows languages must use English with the requested visual and FPS defaults.");
         }
@@ -573,7 +573,6 @@ internal static class Program
                     var menu = canvas.OwnedForms.OfType<SettingsForm>().Single();
                     SendKey(Keys.F12, false);
                     Check(menu.Text == UiText.SettingsTitle(AppLanguage.English), "Documentation screenshots must use English.");
-                    menu.Controls[0].Controls.OfType<CheckBox>().Single(control => control.Name == "StartupHints").Checked = false;
                     SaveScreenshot(menu, Path.Combine(directory, "settings.png"));
                     menu.Controls[0].Controls.OfType<ComboBox>().Single(control => control.Name == "Language").SelectedIndex = 1;
                     SaveScreenshot(menu, Path.Combine(directory, "settings-ru.png"));
