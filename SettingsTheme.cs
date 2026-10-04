@@ -59,10 +59,12 @@ internal sealed class SettingsButton : Button
         Padding = new Padding(16, 9, 16, 9);
         Margin = new Padding(5);
         Cursor = Cursors.Hand;
-        SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
     }
     protected override void OnPaint(PaintEventArgs e)
     {
+        // ButtonBase can skip background painting; initialize the entire reused buffer.
+        e.Graphics.Clear(Parent?.BackColor ?? SystemColors.Control);
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         Color fill = Primary ? SettingsTheme.Purple : BackColor;
         using var path = SettingsTheme.Round(new RectangleF(0, 0, Width - 1, Height - 1), 9 * DeviceDpi / 96f);
@@ -84,7 +86,7 @@ internal sealed class SettingsToggle : CheckBox
         AutoSize = true;
         Margin = new Padding(0, 4, 0, 4);
         Cursor = Cursors.Hand;
-        SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
     }
     public override Size GetPreferredSize(Size proposedSize)
     {
@@ -93,6 +95,7 @@ internal sealed class SettingsToggle : CheckBox
     }
     protected override void OnPaint(PaintEventArgs e)
     {
+        e.Graphics.Clear(BackColor);
         float scale = DeviceDpi / 96f;
         float side = 20 * scale;
         var box = new RectangleF(0, (Height - side) / 2, side, side);

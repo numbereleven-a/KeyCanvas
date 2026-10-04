@@ -14,6 +14,7 @@
 - Startup hints display the configured shortcuts and hold times directly on the canvas.
 
 ### Fixed
+- Settings checkboxes and rounded buttons clear their drawing buffers, preventing overlapping text and dark fragments during live repainting.
 - Sound previews share the canvas MIDI output instead of attempting to open a second device.
 - Cancelling settings restores the canvas instrument after previewing another sound.
 - The original soft piano, bells and xylophone remain available without MIDI.
