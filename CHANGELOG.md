@@ -9,6 +9,7 @@
 - A separate Shortcuts tab for quit/unlock, clear and settings, with Ctrl/Alt/Shift modifiers and hold times from 0.5 to 10 seconds.
 
 ### Changed
+- Redesigned settings with rounded cards, purple accents, synchronized sliders and numeric fields, and a responsive layout with fixed action buttons.
 - Piano is the default sound, at 15% volume.
 - Startup hints display the configured shortcuts and hold times directly on the canvas.
 

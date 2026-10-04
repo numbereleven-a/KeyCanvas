@@ -362,9 +362,23 @@ internal static class Program
             Check(menu.SelectedSettings == selected, "Menu must preserve every preference until applied.");
             using var host = ShowPreview(menu);
             var buttons = menu.Controls.OfType<FlowLayoutPanel>().Single();
+            var number = menu.Controls.Find("Shape size, %", true).OfType<NumericUpDown>().Single();
+            var slider = number.Parent!.Controls.OfType<SettingsSlider>().Single();
+            typeof(SettingsSlider).GetMethod("OnKeyDown", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(slider, [new KeyEventArgs(Keys.Right)]);
+            Check(menu.SelectedSettings.ShapeSizePercent == 160, "Slider keyboard input must update the numeric setting.");
+            typeof(SettingsSlider).GetMethod("OnMouseDown", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(slider, [new MouseEventArgs(MouseButtons.Left, 1, slider.Width - 1, 10, 0)]);
+            typeof(SettingsSlider).GetMethod("OnMouseUp", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(slider, [new MouseEventArgs(MouseButtons.Left, 1, slider.Width - 1, 10, 0)]);
+            Check(menu.SelectedSettings.ShapeSizePercent == 200, "Slider pointer input must update the numeric setting within its limits.");
+            menu.Width = 760;
+            Application.DoEvents();
+            Check(((TableLayoutPanel)menu.Controls.Find("OptionsLayout", true).Single()).ColumnCount == 1 && buttons.Visible,
+                "Narrow menus must stack cards while keeping action buttons visible.");
             buttons.Controls.OfType<Button>().Single(button => button.Name == "Reset").PerformClick();
             Check(menu.SelectedSettings == new CanvasSettings { Language = selected.Language }, "Reset must restore visual defaults and preserve the chosen language.");
-            menu.Controls.Find("OptionsLayout", true).Single().Controls.OfType<Button>().Single(button => button.Name == "PreviewSound").PerformClick();
+            menu.Controls.Find("PreviewSound", true).OfType<Button>().Single().PerformClick();
             Check(selected.Figures == FigureStyle.Star, "Editing the menu must not change the active settings before applying.");
         }
 
@@ -510,7 +524,7 @@ internal static class Program
         finally { CultureInfo.CurrentUICulture = original; }
 
         using var menu = new SettingsForm(new() { Language = AppLanguage.English, Figures = FigureStyle.Star, Palette = ColorPalette.Cool });
-        var selector = menu.Controls.Find("OptionsLayout", true).Single().Controls.OfType<ComboBox>().Single(control => control.Name == "Language");
+        var selector = menu.Controls.Find("Language", true).OfType<ComboBox>().Single();
         selector.SelectedIndex = 1;
         Check(menu.Text == UiText.SettingsTitle(AppLanguage.Russian) && menu.SelectedSettings.Language == AppLanguage.Russian &&
             menu.SelectedSettings.Figures == FigureStyle.Star && menu.SelectedSettings.Palette == ColorPalette.Cool,
@@ -586,11 +600,11 @@ internal static class Program
                     SendKey(Keys.F12, false);
                     Check(menu.Text == UiText.SettingsTitle(AppLanguage.English), "Documentation screenshots must use English.");
                     SaveScreenshot(menu, Path.Combine(directory, "settings.png"));
-                    menu.Controls.Find("OptionsLayout", true).Single().Controls.OfType<ComboBox>().Single(control => control.Name == "Language").SelectedIndex = 1;
+                    menu.Controls.Find("Language", true).OfType<ComboBox>().Single().SelectedIndex = 1;
                     SaveScreenshot(menu, Path.Combine(directory, "settings-ru.png"));
                     menu.Controls.OfType<TabControl>().Single().SelectedIndex = 1;
                     SaveScreenshot(menu, Path.Combine(directory, "shortcuts-ru.png"));
-                    menu.Controls.Find("OptionsLayout", true).Single().Controls.OfType<ComboBox>().Single(control => control.Name == "Language").SelectedIndex = 0;
+                    menu.Controls.Find("Language", true).OfType<ComboBox>().Single().SelectedIndex = 0;
                     SaveScreenshot(menu, Path.Combine(directory, "shortcuts.png"));
                     menu.DialogResult = DialogResult.Cancel;
                     stage = 5;
@@ -768,8 +782,8 @@ internal static class Program
         using (var host = ShowPreview(menu))
         {
             var layout = menu.Controls.Find("OptionsLayout", true).Single();
-            var choice = layout.Controls.OfType<ComboBox>().Single(control => control.Name == "Sound");
-            var listen = layout.Controls.OfType<Button>().Single(control => control.Name == "PreviewSound");
+            var choice = layout.Controls.Find("Sound", true).OfType<ComboBox>().Single();
+            var listen = layout.Controls.Find("PreviewSound", true).OfType<Button>().Single();
             Check(choice.Items.Count == 7, "The original three sounds must remain alongside the four MIDI instruments.");
             foreach (SoundStyle timbre in Enum.GetValues<SoundStyle>())
             {
@@ -938,7 +952,7 @@ internal static class Program
                         "Two-second F12 hold must open and focus the settings menu.");
                     SendKey(Keys.F12, false);
                     f12Down = false;
-                    var color = settingsMenu!.Controls.Find("OptionsLayout", true).Single().Controls.OfType<Button>().Single(button => button.Name == "Background");
+                    var color = settingsMenu!.Controls.Find("Background", true).OfType<Button>().Single();
                     canvas.BeginInvoke(() => color.PerformClick());
                     elapsed.Restart();
                     stage = 2;

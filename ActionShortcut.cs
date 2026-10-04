@@ -36,11 +36,11 @@ internal sealed record ActionShortcut
 
 internal sealed class ShortcutEditor : FlowLayoutPanel
 {
-    private readonly ComboBox key = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 85 };
-    private readonly CheckBox ctrl = new() { Text = "Ctrl", AutoSize = true };
-    private readonly CheckBox alt = new() { Text = "Alt", AutoSize = true };
-    private readonly CheckBox shift = new() { Text = "Shift", AutoSize = true };
-    private readonly NumericUpDown seconds = new() { Minimum = .5m, Maximum = 10, DecimalPlaces = 1, Increment = .5m, Width = 65 };
+    private readonly ComboBox key = new() { FlatStyle = FlatStyle.Flat, BackColor = Color.White, DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
+    private readonly CheckBox ctrl = new SettingsToggle { Text = "Ctrl", AutoSize = true };
+    private readonly CheckBox alt = new SettingsToggle { Text = "Alt", AutoSize = true };
+    private readonly CheckBox shift = new SettingsToggle { Text = "Shift", AutoSize = true };
+    private readonly NumericUpDown seconds = new() { BorderStyle = BorderStyle.FixedSingle, Minimum = .5m, Maximum = 10, DecimalPlaces = 1, Increment = .5m, Width = 85 };
     internal ShortcutEditor()
     {
         AutoSize = true;

@@ -56,6 +56,10 @@ action. Repeat the action by releasing and holding the key again.
 
 ![English settings menu](docs/images/settings.png)
 
+Settings are grouped into Appearance, Shapes, Performance & Audio, and
+Interaction cards. Sliders and numeric fields stay synchronized. Cards stack
+on narrow screens; Defaults, Cancel and Apply remain at the bottom.
+
 Choose **ENG** or **RUS** directly in the menu. On first launch, Russian Windows
 display language selects Russian; other Windows display languages select
 English. The keyboard layout does not choose the application language.
