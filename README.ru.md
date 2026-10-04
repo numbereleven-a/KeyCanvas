@@ -1,4 +1,4 @@
-# KeyCanvas 1.0
+# KeyCanvas 1.1
 
 [English README](README.md)
 
@@ -16,7 +16,7 @@ KeyCanvas открывает полноэкранное полотно: нажа
 
 ## Скачать и запустить
 
-Скачайте **KeyCanvas-1.0.0-win-x64.zip** из
+Скачайте **KeyCanvas-1.1.0-win-x64.zip** из
 [последнего релиза](https://github.com/numbereleven-a/KeyCanvas/releases/latest),
 распакуйте архив и запустите `KeyCanvas.exe`. Устанавливать .NET отдельно не нужно.
 

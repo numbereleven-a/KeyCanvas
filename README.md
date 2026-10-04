@@ -1,4 +1,4 @@
-# KeyCanvas 1.0
+# KeyCanvas 1.1
 
 [Russian README](README.ru.md)
 
@@ -16,7 +16,7 @@ Use it for:
 
 ## Download and start
 
-Download **KeyCanvas-1.0.0-win-x64.zip** from the
+Download **KeyCanvas-1.1.0-win-x64.zip** from the
 [latest release](https://github.com/numbereleven-a/KeyCanvas/releases/latest),
 extract it, and run `KeyCanvas.exe`. The portable build includes .NET.
 
@@ -135,7 +135,7 @@ Use Windows and .NET SDK 10 with Windows Desktop support.
 ```powershell
 dotnet build KeyCanvas.csproj -c Release
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release
-dotnet publish KeyCanvas.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o artifacts/1.0.0/release/win-x64
+dotnet publish KeyCanvas.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o artifacts/1.1.0/release/win-x64
 ```
 
 Optional checks:
@@ -143,7 +143,7 @@ Optional checks:
 ```powershell
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --menu-check
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --new-modes-check
-dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --release-check artifacts/1.0.0/release/win-x64/KeyCanvas.exe
+dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --release-check artifacts/1.1.0/release/win-x64/KeyCanvas.exe
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --benchmark
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --window-benchmark
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --screenshots docs/images
