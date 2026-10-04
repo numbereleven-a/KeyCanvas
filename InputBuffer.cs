@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace KeyCanvas;
 
-internal readonly record struct KeyPress(int Key, double Time);
+internal readonly record struct KeyPress(int Key, double Time, string? Label = null, Keys Modifiers = Keys.None);
 internal sealed class InputFrame
 {
     internal double?[] DownSince { get; } = new double?[256];
@@ -15,6 +15,7 @@ internal sealed class InputBuffer
     private readonly double?[] downSince = new double?[256];
     private readonly Queue<KeyPress> presses = new();
     private readonly InputFrame frame = new();
+    private bool capsLock = KeyLabels.CapsLockOn;
     internal const int MaxPendingPresses = 256;
     internal static double Now => (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
 
@@ -32,9 +33,15 @@ internal sealed class InputBuffer
             if (downSince[key].HasValue)
                 return; // Windows autorepeat grows the existing object, without creating more.
             downSince[key] = time;
+            if (key == (int)Keys.Capital)
+                capsLock = !capsLock;
             if (presses.Count == MaxPendingPresses)
                 presses.Dequeue();
-            presses.Enqueue(new KeyPress(key, time));
+            bool Held(Keys generic, Keys left, Keys right) => downSince[(int)generic].HasValue || downSince[(int)left].HasValue || downSince[(int)right].HasValue;
+            Keys modifiers = (Held(Keys.ControlKey, Keys.LControlKey, Keys.RControlKey) ? Keys.Control : 0) |
+                (Held(Keys.Menu, Keys.LMenu, Keys.RMenu) ? Keys.Alt : 0) |
+                (Held(Keys.ShiftKey, Keys.LShiftKey, Keys.RShiftKey) ? Keys.Shift : 0);
+            presses.Enqueue(new KeyPress(key, time, KeyLabels.Get(key, downSince, capsLock), modifiers));
         }
     }
 
@@ -56,6 +63,7 @@ internal sealed class InputBuffer
         {
             Array.Clear(downSince);
             presses.Clear();
+            capsLock = KeyLabels.CapsLockOn;
         }
     }
 }

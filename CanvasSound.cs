@@ -1,109 +1,108 @@
-using System.Media;
-using System.Text;
+using System.Runtime.InteropServices;
 
 namespace KeyCanvas;
 
 internal sealed class CanvasSound : IDisposable
 {
-    private static readonly double[] Notes = [261.63, 293.66, 329.63, 392, 440, 523.25, 587.33, 659.25];
-    private readonly List<SoundPlayer> players = new();
-    private readonly List<MemoryStream> streams = new();
-    private SoundStyle preparedStyle;
-    private int preparedVolume;
+    private readonly Dictionary<int, (int Note, double Until)> playing = new();
+    private nint device;
     private bool enabled;
-    private double lastPlayed = double.NegativeInfinity;
+    private int velocity;
+    private SoundStyle style;
+    private readonly System.Windows.Forms.Timer releases = new() { Interval = 25 };
+    internal bool Available => device != 0;
+
+    internal CanvasSound()
+    {
+        releases.Tick += (_, _) =>
+        {
+            foreach (int key in playing.Keys.Where(key => InputBuffer.Now >= playing[key].Until).ToArray())
+                Release(key);
+            if (playing.Count == 0)
+                releases.Stop();
+        };
+    }
 
     internal void ApplySettings(CanvasSettings settings)
     {
+        Stop();
         enabled = settings.SoundsEnabled && settings.SoundVolumePercent > 0;
-        if (!enabled)
-        {
-            Stop();
-            return;
-        }
-        if (players.Count > 0 && preparedStyle == settings.Sound && preparedVolume == settings.SoundVolumePercent)
-            return;
-        ClearPlayers();
-        for (int note = 0; note < Notes.Length; note++)
-        {
-            var stream = new MemoryStream(CreateWave(settings.Sound, settings.SoundVolumePercent, note));
-            var player = new SoundPlayer(stream);
-            streams.Add(stream);
-            players.Add(player);
-            player.Load(); // Cache the small PCM samples before receiving any key presses.
-        }
-        preparedStyle = settings.Sound;
-        preparedVolume = settings.SoundVolumePercent;
+        velocity = Math.Clamp((int)Math.Round(settings.SoundVolumePercent * 1.27), 1, 127);
+        style = settings.Sound;
+        if (enabled && device == 0)
+            midiOutOpen(out device, uint.MaxValue, 0, 0, 0);
+        if (device != 0)
+            Send(0xC0, ProgramFor(style), 0);
     }
 
-    internal void Play(int key, double now)
+    internal static int ProgramFor(SoundStyle style) => style switch
     {
-        // Limit rapid bursts; the most recent note replaces playback rather than building a queue.
-        if (!enabled || now - lastPlayed < .06 || players.Count == 0)
+        SoundStyle.Piano => 0, SoundStyle.Bells => 14, SoundStyle.Xylophone => 13, _ => 80
+    };
+    internal static int NoteFor(int key) => 60 + (int)((uint)(key - (int)Keys.A) % 24);
+
+    internal void Play(int key, double now, bool held = false)
+    {
+        if (!enabled || device == 0)
             return;
-        lastPlayed = now;
-        players[(int)((uint)key % (uint)players.Count)].Play();
+        Release(key);
+        int note = NoteFor(key);
+        // One MIDI channel is enough for the selected instrument, with a bounded number of voices.
+        if (playing.Count >= 32)
+        {
+            int oldest = playing.Keys.First();
+            Release(oldest);
+        }
+        playing[key] = (note, held ? double.PositiveInfinity : now + .45);
+        Send(0x90, note, velocity);
+        releases.Start();
+    }
+
+    internal void Update(double?[] held, double now)
+    {
+        foreach (int key in playing.Keys.ToArray())
+        {
+            var voice = playing[key];
+            if (now >= voice.Until || double.IsPositiveInfinity(voice.Until) && !held[key].HasValue)
+            {
+                Release(key);
+            }
+        }
     }
 
     internal void Stop()
     {
-        if (players.Count > 0)
-            players[0].Stop();
-    }
-
-    internal static byte[] CreateWave(SoundStyle style, int volumePercent, int note)
-    {
-        const int sampleRate = 22050;
-        const double duration = .4;
-        int samples = (int)(sampleRate * duration);
-        using var stream = new MemoryStream(44 + samples * 2);
-        using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true);
-        writer.Write("RIFF"u8);
-        writer.Write(36 + samples * 2);
-        writer.Write("WAVEfmt "u8);
-        writer.Write(16);
-        writer.Write((ushort)1); // PCM
-        writer.Write((ushort)1); // Mono
-        writer.Write(sampleRate);
-        writer.Write(sampleRate * 2);
-        writer.Write((ushort)2);
-        writer.Write((ushort)16);
-        writer.Write("data"u8);
-        writer.Write(samples * 2);
-        double frequency = Notes[note];
-        for (int i = 0; i < samples; i++)
+        releases.Stop();
+        if (device != 0)
         {
-            double time = (double)i / sampleRate;
-            double phase = Math.Tau * frequency * time;
-            double value = style switch
-            {
-                SoundStyle.Piano => Math.Sin(phase) * Math.Exp(-7 * time) +
-                    .35 * Math.Sin(phase * 2) * Math.Exp(-16 * time) + .12 * Math.Sin(phase * 3) * Math.Exp(-25 * time),
-                SoundStyle.Bells => Math.Sin(phase) * Math.Exp(-6 * time) +
-                    .35 * Math.Sin(phase * 2.76) * Math.Exp(-14 * time) + .15 * Math.Sin(phase * 5.4) * Math.Exp(-28 * time),
-                _ => Math.Sin(phase) * Math.Exp(-10 * time) +
-                    .5 * Math.Sin(phase * 3) * Math.Exp(-24 * time) + .2 * Math.Sin(phase * 6) * Math.Exp(-36 * time)
-            };
-            double envelope = Math.Min(1, time / .01) * Math.Min(1, (duration - time) / .03);
-            writer.Write((short)(value / 1.7 * envelope * volumePercent / 100 * .2 * short.MaxValue));
+            Send(0xB0, 120, 0); // All sound off, including release tails when leaving the canvas.
+            Send(0xB0, 123, 0);
         }
-        return stream.ToArray();
+        playing.Clear();
     }
 
-    private void ClearPlayers()
+    private void Release(int key)
     {
-        Stop();
-        foreach (var player in players)
-            player.Dispose();
-        foreach (var stream in streams)
-            stream.Dispose();
-        players.Clear();
-        streams.Clear();
+        if (playing.Remove(key, out var voice) && !playing.Values.Any(other => other.Note == voice.Note))
+            Send(0x80, voice.Note, 0);
     }
+
+    private void Send(int status, int first, int second) =>
+        midiOutShortMsg(device, (uint)(status | first << 8 | second << 16));
 
     public void Dispose()
     {
+        Stop();
+        if (device != 0)
+        {
+            midiOutClose(device);
+            device = 0;
+        }
         enabled = false;
-        ClearPlayers();
+        releases.Dispose();
     }
+
+    [DllImport("winmm.dll")] private static extern uint midiOutOpen(out nint handle, uint device, nint callback, nint instance, uint flags);
+    [DllImport("winmm.dll")] private static extern uint midiOutShortMsg(nint handle, uint message);
+    [DllImport("winmm.dll")] private static extern uint midiOutClose(nint handle);
 }

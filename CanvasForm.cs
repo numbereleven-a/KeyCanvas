@@ -8,9 +8,9 @@ internal sealed class CanvasForm : Form
     private readonly InputBuffer input = new();
     private readonly CanvasScene scene = new();
     private readonly CanvasSound sounds = new();
-    private readonly HoldGesture exitGesture = new(5);
-    private readonly HoldGesture clearGesture = new(3);
-    private readonly HoldGesture settingsGesture = new(2);
+    private HoldGesture exitGesture;
+    private HoldGesture clearGesture;
+    private HoldGesture settingsGesture;
     private FrameClock? clock;
     private KeyboardHook? keyboard;
     private bool cursorHidden;
@@ -44,6 +44,9 @@ internal sealed class CanvasForm : Form
     internal CanvasForm(CanvasSettings? initialSettings = null)
     {
         settings = initialSettings ?? SettingsStore.Load(SettingsStore.FilePath);
+        exitGesture = new(settings.ExitShortcut.HoldSeconds);
+        clearGesture = new(settings.ClearShortcut.HoldSeconds);
+        settingsGesture = new(settings.MenuShortcut.HoldSeconds);
         timingLabel = UiText.Pick(settings.Language, "Measuring…", "Замер кадра…");
         Text = "KeyCanvas";
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
@@ -51,6 +54,7 @@ internal sealed class CanvasForm : Form
         StartPosition = FormStartPosition.Manual;
         AutoScaleMode = AutoScaleMode.None;
         BackColor = Color.FromArgb(settings.BackgroundArgb);
+        Opacity = settings.TransparentCanvas ? settings.CanvasOpacityPercent / 100.0 : 1;
         scene.ApplySettings(settings);
         DoubleBuffered = true;
         ShowInTaskbar = false;
@@ -148,24 +152,33 @@ internal sealed class CanvasForm : Form
             RecoverKeyboard();
         bool previouslyHadObjects = scene.Objects.Count > 0;
         var frame = input.Read();
-        if (exitGesture.Update(frame.DownSince[(int)Keys.Escape], now))
+        if (exitGesture.Update(settings.ExitShortcut.Started(frame.DownSince), now))
         {
             exitAllowed = true;
             Close();
             return;
         }
-        if (settingsGesture.Update(frame.DownSince[(int)Keys.F12], now))
+        if (settingsGesture.Update(settings.MenuShortcut.Started(frame.DownSince), now))
         {
             OpenSettings();
             return;
         }
         foreach (var press in frame.Presses)
         {
+            if ((press.Key is (int)Keys.LShiftKey or (int)Keys.RShiftKey or (int)Keys.ShiftKey) && press.Modifiers.HasFlag(Keys.Alt) ||
+                (press.Key is (int)Keys.LMenu or (int)Keys.RMenu or (int)Keys.Menu) && press.Modifiers.HasFlag(Keys.Shift))
+            {
+                var layouts = InputLanguage.InstalledInputLanguages.Cast<InputLanguage>().ToArray();
+                int current = Array.FindIndex(layouts, layout => layout.Handle == InputLanguage.CurrentInputLanguage.Handle);
+                if (layouts.Length > 1)
+                    InputLanguage.CurrentInputLanguage = layouts[(current + 1) % layouts.Length];
+            }
             scene.Press(press);
-            if (press.Key is not ((int)Keys.Escape or (int)Keys.F1 or (int)Keys.F12))
-                sounds.Play(press.Key, now);
+            if (!settings.IsActionKey(press.Key))
+                sounds.Play(press.Key, now, held: true);
         }
-        if (clearGesture.Update(frame.DownSince[(int)Keys.F1], now))
+        sounds.Update(frame.DownSince, now);
+        if (clearGesture.Update(settings.ClearShortcut.Started(frame.DownSince), now))
             scene.Clear();
         scene.Update(elapsed, frame.DownSince);
         bool indicators = exitGesture.Progress > 0 || clearGesture.Progress > 0 || settingsGesture.Progress > 0;
@@ -224,7 +237,7 @@ internal sealed class CanvasForm : Form
         DrawIndicator(e.Graphics, clearGesture.Progress, 110, UiText.Pick(settings.Language, "Clear", "Очистка"));
         DrawIndicator(e.Graphics, settingsGesture.Progress, 192, UiText.Pick(settings.Language, "Settings", "Настройки"));
         if (settings.ShowStartupHints)
-            StartupHints.Draw(e.Graphics, primaryViewport, settings.Language, InputBuffer.Now - startupStarted, BackColor);
+            StartupHints.Draw(e.Graphics, primaryViewport, settings.Language, InputBuffer.Now - startupStarted, BackColor, settings);
         if (settings.ShowFrameTiming || settings.ShowFps)
         {
             float scale = DeviceDpi / 96f;
@@ -277,11 +290,15 @@ internal sealed class CanvasForm : Form
             if (menu.ShowDialog(this) == DialogResult.OK)
             {
                 settings = menu.SelectedSettings;
+                exitGesture = new(settings.ExitShortcut.HoldSeconds);
+                clearGesture = new(settings.ClearShortcut.HoldSeconds);
+                settingsGesture = new(settings.MenuShortcut.HoldSeconds);
                 sampleCount = sampleIndex = 0;
                 nextTimingLabel = 0;
                 timingLabel = UiText.Pick(settings.Language, "Measuring…", "Замер кадра…");
                 fpsLabel = "FPS: …";
                 BackColor = Color.FromArgb(settings.BackgroundArgb);
+                Opacity = settings.TransparentCanvas ? settings.CanvasOpacityPercent / 100.0 : 1;
                 scene.ApplySettings(settings);
                 sounds.ApplySettings(settings);
                 repaintNeeded = true;

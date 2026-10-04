@@ -2,7 +2,7 @@ using System.Drawing.Drawing2D;
 
 namespace KeyCanvas;
 
-internal enum ShapeKind { Circle, Triangle, Square, Star, Line, Ring, Particle }
+internal enum ShapeKind { Circle, Triangle, Square, Star, Line, Ring, Particle, Letter }
 
 internal sealed class CanvasObject
 {
@@ -16,6 +16,7 @@ internal sealed class CanvasObject
     internal double Age;
     internal double Lifetime;
     internal double? FadeRemaining;
+    internal string? Label;
 }
 
 internal sealed class CanvasScene
@@ -72,11 +73,19 @@ internal sealed class CanvasScene
 
     internal void Press(KeyPress press)
     {
-        if (press.Key is (int)Keys.Escape or (int)Keys.F1 or (int)Keys.F12)
+        if (Settings.IsActionKey(press.Key))
             return;
         float energy = Settings.ReactToRhythm && press.Time - previousPress < .22 ? 1.5f : 1;
         previousPress = press.Time;
         PointF point = RandomPoint();
+        if (Settings.AlphabetMode)
+        {
+            var letter = Add(ShapeKind.Letter, point, 55 * energy, Settings.FigureLifetimeSeconds);
+            letter.Label = press.Label ?? ((Keys)press.Key).ToString();
+            heldObjects[press.Key] = letter;
+            Burst(point, 7, energy);
+            return;
+        }
         if (press.Key == (int)Keys.Space)
         {
             point = new PointF(centerViewport.Left + centerViewport.Width / 2f,
@@ -160,6 +169,8 @@ internal sealed class CanvasScene
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
         using var brush = new SolidBrush(Color.White);
         using var pen = new Pen(Color.White, 4);
+        using var font = new Font("Segoe UI", 48, FontStyle.Bold, GraphicsUnit.Pixel);
+        using var textFormat = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
         Span<PointF> points = stackalloc PointF[10];
         foreach (var shape in objects)
         {
@@ -171,6 +182,15 @@ internal sealed class CanvasScene
             var bounds = new RectangleF(shape.Position.X - r, shape.Position.Y - r, r * 2, r * 2);
             switch (shape.Kind)
             {
+                case ShapeKind.Letter:
+                    brush.Color = color;
+                    var state = graphics.Save();
+                    graphics.TranslateTransform(shape.Position.X, shape.Position.Y);
+                    float textScale = r / 55;
+                    graphics.ScaleTransform(textScale, textScale);
+                    graphics.DrawString(shape.Label, font, brush, new RectangleF(-150, -55, 300, 110), textFormat);
+                    graphics.Restore(state);
+                    break;
                 case ShapeKind.Circle:
                 case ShapeKind.Particle:
                     brush.Color = color;

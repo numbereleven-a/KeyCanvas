@@ -68,13 +68,36 @@ toggled separately.
 
 Defaults: **500 objects**, **5-second shape lifetime**, **60 FPS target**.
 Particles have shorter lifetimes. Old objects fade to keep the scene bounded.
-Quiet synthesized **bells are enabled by default**, at **15% application volume**.
-Choose soft piano, bells or xylophone, adjust the volume, or uncheck **Enable
-quiet sounds** to mute playback. **Listen** previews the selected timbre.
-Sounds react to new key presses and mouse clicks or scrolling, rather than
-continuous mouse movement or key holds. Rapid inputs replace the previous note;
-playback is rate-limited so it does not accumulate a sound queue.
+Quiet **bells are enabled by default**, at **15% application volume**.
+Choose piano, bells, xylophone or synthesizer, adjust the volume, or uncheck
+**Enable quiet sounds**. **Listen** previews the selected instrument.
+Sound uses the Windows General MIDI synthesizer. Multiple notes can sound
+together; holding a key holds its note, and releasing it sends note-off.
+Piano and percussion naturally decay even during a hold. Mouse clicks and
+scrolling play short notes; movement remains silent. Instrument quality and
+availability depend on the Windows MIDI output device.
 
+Enable **Alphabet and key names** to draw letters, numbers and key names
+instead of keyboard shapes. Letters follow the current keyboard layout,
+including Shift and Caps Lock, independently of the ENG/RUS menu language.
+**Alt+Shift** cycles installed layouts on the canvas. Control keys such as
+Space and Enter have labels; reserved adult action keys stay reserved.
+
+Enable **Transparent canvas** to see the live desktop through the canvas.
+**Canvas opacity** ranges from 10% to 100%; lower values reveal more of the
+desktop. This affects both the background and drawings. Choose a black
+background for dimming or another color for a tint. The canvas continues to
+capture input; visibility does not allow clicks or typing into underlying apps.
+Transparency and alphabet mode are disabled by default.
+
+The **Shortcuts** tab configures quit/unlock, clear and settings separately:
+choose a key, optional Ctrl/Alt/Shift modifiers, and a hold time from 0.5 to
+10 seconds. For example, Ctrl+F1 can unlock the canvas. Hold the complete chord
+for the selected duration; releasing any required key cancels the action.
+Use different chords for each action. Startup hints show the saved shortcuts.
+Ctrl+Alt+Delete remains available and cannot be assigned to an action.
+
+![Configurable action shortcuts](docs/images/shortcuts.png)
 **Always show FPS** keeps a counter on the canvas until disabled; it is **off by
 default**. An independent frame-time option shows CPU median and p95 over the
 last 120 processed frames. These measure application updates, not physical
@@ -115,6 +138,7 @@ Optional checks:
 
 ```powershell
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --menu-check
+dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --new-modes-check
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --release-check artifacts/1.0.0/release/win-x64/KeyCanvas.exe
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --benchmark
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --window-benchmark

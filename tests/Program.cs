@@ -46,6 +46,12 @@ internal static class Program
                 Benchmark();
                 return 0;
             }
+            if (args.Length == 1 && args[0] == "--new-modes-check")
+            {
+                TestNewModesWindow();
+                Console.WriteLine("Passed: desktop transparency, shortcut tab, custom Ctrl+F2 menu and Ctrl+F1 exit.");
+                return 0;
+            }
             TestInputAndGestures();
             TestKeyboardPolicy();
             TestScene();
@@ -54,6 +60,7 @@ internal static class Program
             TestSettings();
             TestLocalization();
             TestSound();
+            TestNewModes();
             Render(args.Length == 2 && args[0] == "--render" ? args[1] : null);
             Console.WriteLine("Passed: input transitions, timed gestures, bounded scene, rendering, hook lifetime, frame clock, settings.");
             return 0;
@@ -100,9 +107,14 @@ internal static class Program
             SendKey(Keys.F12, true);
             Thread.Sleep(2400);
             SendKey(Keys.F12, false);
-            nint menu = NativeMethods.FindWindow(null, UiText.SettingsTitle(SettingsStore.Load(SettingsStore.FilePath).Language));
-            NativeMethods.GetWindowThreadProcessId(menu, out owner);
-            Check(owner == process.Id && NativeMethods.GetForegroundWindow() == menu, "Portable F12 must open its own settings.");
+            nint menu = 0;
+            string title = UiText.SettingsTitle(SettingsStore.Load(SettingsStore.FilePath).Language);
+            Check(SpinWait.SpinUntil(() =>
+            {
+                menu = NativeMethods.FindWindow(null, title);
+                NativeMethods.GetWindowThreadProcessId(menu, out owner);
+                return owner == process.Id && IsWindowVisible(menu) && NativeMethods.GetForegroundWindow() == menu;
+            }, 5000), "Portable F12 must show and activate its own settings.");
             SendKey(Keys.Escape, true);
             SendKey(Keys.Escape, false);
             Thread.Sleep(300);
@@ -349,10 +361,10 @@ internal static class Program
         {
             Check(menu.SelectedSettings == selected, "Menu must preserve every preference until applied.");
             using var host = ShowPreview(menu);
-            var buttons = menu.Controls[0].Controls.OfType<FlowLayoutPanel>().Single();
+            var buttons = menu.Controls.OfType<FlowLayoutPanel>().Single();
             buttons.Controls.OfType<Button>().Single(button => button.Name == "Reset").PerformClick();
             Check(menu.SelectedSettings == new CanvasSettings { Language = selected.Language }, "Reset must restore visual defaults and preserve the chosen language.");
-            menu.Controls[0].Controls.OfType<Button>().Single(button => button.Name == "PreviewSound").PerformClick();
+            menu.Controls.Find("OptionsLayout", true).Single().Controls.OfType<Button>().Single(button => button.Name == "PreviewSound").PerformClick();
             Check(selected.Figures == FigureStyle.Star, "Editing the menu must not change the active settings before applying.");
         }
 
@@ -498,7 +510,7 @@ internal static class Program
         finally { CultureInfo.CurrentUICulture = original; }
 
         using var menu = new SettingsForm(new() { Language = AppLanguage.English, Figures = FigureStyle.Star, Palette = ColorPalette.Cool });
-        var selector = menu.Controls[0].Controls.OfType<ComboBox>().Single(control => control.Name == "Language");
+        var selector = menu.Controls.Find("OptionsLayout", true).Single().Controls.OfType<ComboBox>().Single(control => control.Name == "Language");
         selector.SelectedIndex = 1;
         Check(menu.Text == UiText.SettingsTitle(AppLanguage.Russian) && menu.SelectedSettings.Language == AppLanguage.Russian &&
             menu.SelectedSettings.Figures == FigureStyle.Star && menu.SelectedSettings.Palette == ColorPalette.Cool,
@@ -574,8 +586,12 @@ internal static class Program
                     SendKey(Keys.F12, false);
                     Check(menu.Text == UiText.SettingsTitle(AppLanguage.English), "Documentation screenshots must use English.");
                     SaveScreenshot(menu, Path.Combine(directory, "settings.png"));
-                    menu.Controls[0].Controls.OfType<ComboBox>().Single(control => control.Name == "Language").SelectedIndex = 1;
+                    menu.Controls.Find("OptionsLayout", true).Single().Controls.OfType<ComboBox>().Single(control => control.Name == "Language").SelectedIndex = 1;
                     SaveScreenshot(menu, Path.Combine(directory, "settings-ru.png"));
+                    menu.Controls.OfType<TabControl>().Single().SelectedIndex = 1;
+                    SaveScreenshot(menu, Path.Combine(directory, "shortcuts-ru.png"));
+                    menu.Controls.Find("OptionsLayout", true).Single().Controls.OfType<ComboBox>().Single(control => control.Name == "Language").SelectedIndex = 0;
+                    SaveScreenshot(menu, Path.Combine(directory, "shortcuts.png"));
                     menu.DialogResult = DialogResult.Cancel;
                     stage = 5;
                     break;
@@ -601,32 +617,153 @@ internal static class Program
         }
     }
 
+    private static void TestNewModesWindow()
+    {
+        using var desktop = new Form { FormBorderStyle = FormBorderStyle.None, Bounds = SystemInformation.VirtualScreen,
+            StartPosition = FormStartPosition.Manual, BackColor = Color.White, ShowInTaskbar = false };
+        using var canvas = new CanvasForm(new()
+        {
+            AlphabetMode = true, TransparentCanvas = true, CanvasOpacityPercent = 40, BackgroundArgb = Color.Black.ToArgb(),
+            ShowStartupHints = false, SoundsEnabled = false,
+            ExitShortcut = new() { Key = Keys.F1, Modifiers = Keys.Control, HoldSeconds = 1 },
+            MenuShortcut = new() { Key = Keys.F2, Modifiers = Keys.Control, HoldSeconds = .5 }
+        });
+        using var timer = new System.Windows.Forms.Timer { Interval = 50 };
+        var elapsed = Stopwatch.StartNew();
+        Exception? failure = null;
+        int stage = 0;
+        timer.Tick += (_, _) =>
+        {
+            try
+            {
+                double now = elapsed.Elapsed.TotalSeconds;
+                if (now > 8)
+                    throw new InvalidOperationException("Custom shortcut window check timed out.");
+                switch (stage)
+                {
+                    case 0:
+                        if (NativeMethods.GetForegroundWindow() != canvas.Handle)
+                        {
+                            SendKey(Keys.F24, true); SendKey(Keys.F24, false); canvas.Activate();
+                            break;
+                        }
+                        elapsed.Restart(); stage++; break;
+                    case 1 when now > .4:
+                        var primary = (Screen.PrimaryScreen ?? Screen.AllScreens[0]).Bounds;
+                        using (var pixel = new Bitmap(1, 1))
+                        {
+                            using var graphics = Graphics.FromImage(pixel);
+                            graphics.CopyFromScreen(primary.Left + 20, primary.Bottom - 20, 0, 0, new Size(1, 1));
+                            Color color = pixel.GetPixel(0, 0);
+                            Check(color.R is > 140 and < 170 && color.G is > 140 and < 170,
+                                "The live desktop must be visible through the black 40% canvas.");
+                        }
+                        SendKey(Keys.A, true); SendKey(Keys.A, false);
+                        SendKey(Keys.LControlKey, true); SendKey(Keys.F2, true);
+                        elapsed.Restart(); stage++; break;
+                    case 2 when canvas.OwnedForms.OfType<SettingsForm>().Any():
+                        Check(now >= .45, "Custom menu shortcut must respect its hold duration.");
+                        SendKey(Keys.F2, false); SendKey(Keys.LControlKey, false);
+                        var menu = canvas.OwnedForms.OfType<SettingsForm>().Single();
+                        var tabs = menu.Controls.OfType<TabControl>().Single();
+                        Check(tabs.TabPages.Count == 2, "Settings must have a separate shortcut tab.");
+                        tabs.SelectedIndex = 1;
+                        Check(menu.Controls.OfType<FlowLayoutPanel>().Single().Visible, "Apply buttons must remain visible on the shortcut tab.");
+                        stage++; elapsed.Restart();
+                        menu.DialogResult = DialogResult.Cancel;
+                        break;
+                    case 3 when now > .3:
+                        Check(NativeMethods.GetForegroundWindow() == canvas.Handle, "Cancelling settings must restore canvas focus.");
+                        SendKey(Keys.LControlKey, true); SendKey(Keys.F1, true);
+                        elapsed.Restart(); stage++; break;
+                }
+            }
+            catch (Exception error)
+            {
+                failure = error; timer.Stop(); canvas.Dispose(); Application.ExitThread();
+            }
+        };
+        canvas.FormClosed += (_, _) =>
+        {
+            if (stage != 4 || elapsed.Elapsed.TotalSeconds < .9)
+                failure ??= new InvalidOperationException("The custom exit shortcut ended before its full hold.");
+            timer.Stop(); Application.ExitThread();
+        };
+        try { desktop.Show(); timer.Start(); Application.Run(canvas); }
+        finally { foreach (var key in syntheticHeldKeys.ToArray()) SendKey(key, false); }
+        if (failure is not null) throw failure;
+    }
+    private static void TestNewModes()
+    {
+        var selected = new CanvasSettings
+        {
+            AlphabetMode = true, TransparentCanvas = true, CanvasOpacityPercent = 40,
+            Sound = SoundStyle.Synthesizer,
+            ExitShortcut = new() { Key = Keys.F1, Modifiers = Keys.Control, HoldSeconds = 1.5 }
+        };
+        using (var menu = new SettingsForm(selected))
+            Check(menu.SelectedSettings == selected, "New modes and action shortcuts must survive menu binding.");
+        var held = new double?[256];
+        held[(int)Keys.F1] = 1;
+        Check(selected.ExitShortcut.Started(held) is null, "A shortcut must require every selected modifier.");
+        held[(int)Keys.RControlKey] = 2;
+        Check(selected.ExitShortcut.Started(held) == 2, "Timing must begin when the full chord is held.");
+        var gesture = new HoldGesture(1.5);
+        Check(!gesture.Update(selected.ExitShortcut.Started(held), 3) && gesture.Update(selected.ExitShortcut.Started(held), 3.5),
+            "Custom duration must apply to the full chord.");
+        held[(int)Keys.RControlKey] = null;
+        Check(!gesture.Update(selected.ExitShortcut.Started(held), 4) && gesture.Progress == 0,
+            "Releasing a required modifier must cancel the action.");
+        held[(int)Keys.F1] = 5;
+        held[(int)Keys.LControlKey] = 5;
+        Check(selected.ClearShortcut.Started(held) is null, "Ctrl+F1 must not also trigger plain F1.");
+        var scene = new CanvasScene(new Random(8));
+        scene.ApplySettings(selected with { ParticleAmountPercent = 0 });
+        scene.Press(new((int)Keys.A, 0, "ф"));
+        Check(scene.Objects.Single().Kind == ShapeKind.Letter && scene.Objects.Single().Label == "ф",
+            "Alphabet mode must retain the translated key label.");
+        using var bitmap = new Bitmap(1280, 720);
+        using var graphics = Graphics.FromImage(bitmap);
+        scene.Draw(graphics);
+        using (var canvas = new CanvasForm(selected))
+            Check(Math.Abs(canvas.Opacity - .4) < .001, "Transparent mode must apply the chosen opacity.");
+        Check((selected with { CanvasOpacityPercent = 0 }).Normalize().CanvasOpacityPercent == 10,
+            "The canvas must remain visible and receive pointer input.");
+        foreach (InputLanguage layout in InputLanguage.InstalledInputLanguages)
+        {
+            string label = KeyLabels.Translate((int)Keys.A, new byte[256], layout.Handle);
+            if (layout.Culture.TwoLetterISOLanguageName == "ru")
+                Check(label == "ф", "Russian layout must translate A to the printed Russian letter.");
+            if (layout.Culture.TwoLetterISOLanguageName == "en")
+                Check(label == "a", "English layout must translate A to a.");
+        }
+        string path = Path.Combine(Path.GetTempPath(), "KeyCanvas-settings-" + Guid.NewGuid() + ".json");
+        try
+        {
+            SettingsStore.Save(path, selected);
+            Check(SettingsStore.Load(path) == selected, "New modes and shortcut timings must persist.");
+        }
+        finally { File.Delete(path); }
+    }
     private static void TestSound()
     {
-        foreach (SoundStyle style in Enum.GetValues<SoundStyle>())
-        {
-            byte[] wave = CanvasSound.CreateWave(style, 15, 0);
-            Check(Encoding.ASCII.GetString(wave, 0, 4) == "RIFF" && Encoding.ASCII.GetString(wave, 8, 4) == "WAVE" &&
-                BitConverter.ToInt16(wave, 20) == 1 && BitConverter.ToInt16(wave, 22) == 1 &&
-                BitConverter.ToInt32(wave, 24) == 22050 && BitConverter.ToInt16(wave, 34) == 16,
-                "Each timbre must be valid mono 16-bit PCM audio.");
-            int peak = 0;
-            for (int index = 44; index < wave.Length; index += 2)
-                peak = Math.Max(peak, Math.Abs((int)BitConverter.ToInt16(wave, index)));
-            Check(peak > 0 && peak < short.MaxValue * .04 && BitConverter.ToInt16(wave, 44) == 0 &&
-                Math.Abs((int)BitConverter.ToInt16(wave, wave.Length - 2)) < 10,
-                "Default sounds must be quiet and have a smooth beginning and ending.");
-            using var stream = new MemoryStream(wave);
-            using var player = new SoundPlayer(stream);
-            player.Load(); // Validate with the same decoder used by actual playback.
-        }
-        byte[] muted = CanvasSound.CreateWave(SoundStyle.Bells, 0, 0);
-        Check(muted.Skip(44).All(value => value == 0), "Zero volume must produce silence.");
+        Check(CanvasSound.ProgramFor(SoundStyle.Piano) == 0 && CanvasSound.ProgramFor(SoundStyle.Synthesizer) == 80,
+            "Piano and synthesizer must select their General MIDI instruments.");
+        using var audio = new CanvasSound();
+        audio.ApplySettings(new() { Sound = SoundStyle.Piano });
+        var held = new double?[256];
+        held[(int)Keys.A] = held[(int)Keys.S] = InputBuffer.Now;
+        audio.Play((int)Keys.A, InputBuffer.Now, true);
+        audio.Play((int)Keys.S, InputBuffer.Now, true);
+        audio.Update(held, InputBuffer.Now);
+        Array.Clear(held);
+        audio.Update(held, InputBuffer.Now);
+        audio.ApplySettings(new() { SoundsEnabled = false });
+        audio.Play((int)Keys.A, InputBuffer.Now);
         var normalized = (new CanvasSettings { Sound = (SoundStyle)99, SoundVolumePercent = 999 }).Normalize();
         Check(normalized.Sound == SoundStyle.Bells && normalized.SoundVolumePercent == 100,
             "Stored sound preferences must be constrained before playback.");
     }
-
     private static void SaveScreenshot(Form form, string path)
     {
         using var bitmap = new Bitmap(form.Width, form.Height);
@@ -771,7 +908,7 @@ internal static class Program
                         "Two-second F12 hold must open and focus the settings menu.");
                     SendKey(Keys.F12, false);
                     f12Down = false;
-                    var color = settingsMenu!.Controls[0].Controls.OfType<Button>().Single(button => button.Name == "Background");
+                    var color = settingsMenu!.Controls.Find("OptionsLayout", true).Single().Controls.OfType<Button>().Single(button => button.Name == "Background");
                     canvas.BeginInvoke(() => color.PerformClick());
                     elapsed.Restart();
                     stage = 2;

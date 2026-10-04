@@ -12,6 +12,12 @@ internal sealed class SettingsForm : Form
     private readonly ComboBox fps = Choice(["30 FPS", "60 FPS", "90 FPS", "120 FPS"]);
     private readonly ComboBox sound = Choice([]);
     private readonly NumericUpDown volume = Number(0, 100, 5);
+    private readonly NumericUpDown opacity = Number(10, 100, 10);
+    private readonly CheckBox alphabet = Toggle();
+    private readonly CheckBox transparent = Toggle();
+    private readonly ShortcutEditor exitShortcut = new();
+    private readonly ShortcutEditor clearShortcut = new();
+    private readonly ShortcutEditor menuShortcut = new();
     private readonly NumericUpDown size = Number(50, 200, 10);
     private readonly NumericUpDown speed = Number(25, 200, 25);
     private readonly NumericUpDown particles = Number(0, 200, 25);
@@ -41,7 +47,10 @@ internal sealed class SettingsForm : Form
         GrowWhileHeld = grow.Checked, ReactToRhythm = rhythm.Checked,
         ShowFrameTiming = timing.Checked, ShowFps = showFps.Checked,
         ShowStartupHints = startupHints.Checked, SoundsEnabled = soundEnabled.Checked,
-        Sound = (SoundStyle)sound.SelectedIndex, SoundVolumePercent = (int)volume.Value
+        Sound = (SoundStyle)sound.SelectedIndex, SoundVolumePercent = (int)volume.Value,
+        AlphabetMode = alphabet.Checked, TransparentCanvas = transparent.Checked,
+        CanvasOpacityPercent = (int)opacity.Value,
+        ExitShortcut = exitShortcut.Selected, ClearShortcut = clearShortcut.Selected, MenuShortcut = menuShortcut.Selected
     };
 
     internal SettingsForm(CanvasSettings settings)
@@ -61,7 +70,7 @@ internal sealed class SettingsForm : Form
 
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, Padding = new Padding(22, 12, 22, 12), ColumnCount = 2,
+            Name = "OptionsLayout", Dock = DockStyle.Fill, Padding = new Padding(22, 12, 22, 12), ColumnCount = 2,
             AutoScroll = true
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 54));
@@ -74,6 +83,11 @@ internal sealed class SettingsForm : Form
         AddWide(layout, heading);
         AddRow(layout, "Language", "Язык", language);
         AddRow(layout, "Background color", "Цвет фона", background);
+        AddRow(layout, "Canvas opacity, %", "Непрозрачность полотна, %", opacity);
+        Translate(transparent, "Transparent canvas (show desktop behind it)", "Прозрачное полотно (виден рабочий стол)");
+        Translate(alphabet, "Alphabet and key names (current keyboard layout)", "Алфавит и названия клавиш (текущая раскладка)");
+        AddWide(layout, transparent);
+        AddWide(layout, alphabet);
         AddRow(layout, "Shapes", "Фигуры", figures);
         AddRow(layout, "Palette", "Палитра", palette);
         AddRow(layout, "Shape size, %", "Размер фигур, %", size);
@@ -89,6 +103,8 @@ internal sealed class SettingsForm : Form
         {
             previewSound.ApplySettings(SelectedSettings with { SoundsEnabled = true });
             previewSound.Play(0, InputBuffer.Now);
+            if (!previewSound.Available && SelectedSettings.SoundVolumePercent > 0)
+                MessageBox.Show(this, UiText.Pick(SelectedLanguage, "Windows MIDI output is unavailable.", "MIDI-устройство Windows недоступно."), Text);
         };
         AddRow(layout, "Sound preview", "Проверить звук", preview);
         Translate(trail, "Draw a trail when the mouse moves", "Рисовать след при движении мыши");
@@ -114,20 +130,47 @@ internal sealed class SettingsForm : Form
             "Примените изменения для сохранения и возврата к полотну.\nВысокий FPS и большое число объектов увеличивают нагрузку."));
         var buttons = new FlowLayoutPanel
         {
-            AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Fill,
-            WrapContents = true, Margin = Padding.Empty
+            Name = "ActionButtons", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Bottom,
+            WrapContents = true, Padding = new Padding(22, 8, 22, 8)
         };
         var apply = Translate(new Button { AutoSize = true, DialogResult = DialogResult.OK }, "Apply and continue", "Применить и продолжить");
+        apply.Click += (_, _) =>
+        {
+            var chosen = SelectedSettings;
+            if (chosen.ExitShortcut.SameChord(chosen.ClearShortcut) || chosen.ExitShortcut.SameChord(chosen.MenuShortcut) || chosen.ClearShortcut.SameChord(chosen.MenuShortcut))
+            {
+                DialogResult = DialogResult.None;
+                MessageBox.Show(this, UiText.Pick(SelectedLanguage, "Choose different shortcuts for each action.", "Выберите разные сочетания для каждого действия."), Text);
+            }
+        };
         var cancel = Translate(new Button { AutoSize = true, DialogResult = DialogResult.Cancel }, "Cancel", "Отмена");
         var reset = Translate(new Button { Name = "Reset", AutoSize = true }, "Defaults", "По умолчанию");
         reset.Click += (_, _) => SetValues(new() { Language = SelectedLanguage });
         buttons.Controls.AddRange([apply, cancel, reset]);
-        AddWide(layout, buttons);
         AcceptButton = apply;
         CancelButton = cancel;
-        Controls.Add(layout);
+        var tabs = new TabControl { Dock = DockStyle.Fill };
+        var canvasTab = Translate(new TabPage(), "Canvas", "Полотно");
+        canvasTab.Controls.Add(layout);
+        var shortcutTab = Translate(new TabPage(), "Shortcuts", "Горячие клавиши");
+        var shortcutLayout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(18), ColumnCount = 1, AutoScroll = true };
+        AddWide(shortcutLayout, Translate(new Label { AutoSize = true },
+            "Choose a key, optional modifiers and hold time in seconds.\nRelease any required key to cancel. Ctrl+Alt+Delete remains available.",
+            "Выберите клавишу, модификаторы и время удержания в секундах.\nОтпускание нужной клавиши отменяет действие. Ctrl+Alt+Delete доступен."));
+        AddWide(shortcutLayout, Translate(new Label { AutoSize = true }, "Quit / unlock", "Выход / разблокировка"));
+        AddWide(shortcutLayout, exitShortcut);
+        AddWide(shortcutLayout, Translate(new Label { AutoSize = true }, "Clear canvas", "Очистка полотна"));
+        AddWide(shortcutLayout, clearShortcut);
+        AddWide(shortcutLayout, Translate(new Label { AutoSize = true }, "Open settings", "Открыть настройки"));
+        AddWide(shortcutLayout, menuShortcut);
+        shortcutTab.Controls.Add(shortcutLayout);
+        tabs.TabPages.AddRange([canvasTab, shortcutTab]);
+        Controls.Add(tabs);
+        Controls.Add(buttons);
         language.SelectedIndexChanged += (_, _) => ApplyLanguage();
         SetValues(settings);
+        transparent.CheckedChanged += (_, _) => opacity.Enabled = transparent.Checked;
+        opacity.Enabled = transparent.Checked;
 
         background.Click += (_, _) =>
         {
@@ -159,6 +202,12 @@ internal sealed class SettingsForm : Form
         soundEnabled.Checked = settings.SoundsEnabled;
         sound.SelectedIndex = (int)settings.Sound;
         volume.Value = settings.SoundVolumePercent;
+        alphabet.Checked = settings.AlphabetMode;
+        transparent.Checked = settings.TransparentCanvas;
+        opacity.Value = settings.CanvasOpacityPercent;
+        exitShortcut.SetValues(settings.ExitShortcut);
+        clearShortcut.SetValues(settings.ClearShortcut);
+        menuShortcut.SetValues(settings.MenuShortcut);
     }
 
     private T Translate<T>(T control, string english, string russian) where T : Control
@@ -185,7 +234,7 @@ internal sealed class SettingsForm : Form
             ? ["Яркая", "Пастельная", "Тёплая", "Холодная"] : ["Bright", "Pastel", "Warm", "Cool"]);
         sound.Items.Clear();
         sound.Items.AddRange(SelectedLanguage == AppLanguage.Russian
-            ? ["Мягкое пианино", "Колокольчики", "Ксилофон"] : ["Soft piano", "Bells", "Xylophone"]);
+            ? ["Пианино", "Колокольчики", "Ксилофон", "Синтезатор"] : ["Piano", "Bells", "Xylophone", "Synthesizer"]);
         figures.SelectedIndex = figure;
         palette.SelectedIndex = colors;
         sound.SelectedIndex = timbre;
@@ -230,7 +279,7 @@ internal sealed class SettingsForm : Form
         int row = layout.RowCount++;
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.Controls.Add(control, 0, row);
-        layout.SetColumnSpan(control, 2);
+        layout.SetColumnSpan(control, layout.ColumnCount);
     }
 
     protected override void Dispose(bool disposing)

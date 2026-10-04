@@ -4,10 +4,13 @@ namespace KeyCanvas;
 
 internal enum FigureStyle { Random, Circle, Triangle, Square, Star, Line, Ring }
 internal enum ColorPalette { Bright, Pastel, Warm, Cool }
-internal enum SoundStyle { Piano, Bells, Xylophone }
+internal enum SoundStyle { Piano, Bells, Xylophone, Synthesizer }
 
 internal sealed record CanvasSettings
 {
+    internal static readonly ActionShortcut DefaultExit = new() { Key = Keys.Escape, HoldSeconds = 5 };
+    internal static readonly ActionShortcut DefaultClear = new() { Key = Keys.F1, HoldSeconds = 3 };
+    internal static readonly ActionShortcut DefaultMenu = new() { Key = Keys.F12, HoldSeconds = 2 };
     public AppLanguage Language { get; init; } = UiText.WindowsLanguage;
     public int BackgroundArgb { get; init; } = Color.FromArgb(12, 17, 35).ToArgb();
     public FigureStyle Figures { get; init; }
@@ -28,12 +31,26 @@ internal sealed record CanvasSettings
     public bool SoundsEnabled { get; init; } = true;
     public SoundStyle Sound { get; init; } = SoundStyle.Bells;
     public int SoundVolumePercent { get; init; } = 15;
+    public bool AlphabetMode { get; init; }
+    public bool TransparentCanvas { get; init; }
+    public int CanvasOpacityPercent { get; init; } = 60;
+    public ActionShortcut ExitShortcut { get; init; } = DefaultExit;
+    public ActionShortcut ClearShortcut { get; init; } = DefaultClear;
+    public ActionShortcut MenuShortcut { get; init; } = DefaultMenu;
 
-    internal CanvasSettings Normalize() => this with
+    internal bool IsActionKey(int key) => key == (int)ExitShortcut.Key || key == (int)ClearShortcut.Key || key == (int)MenuShortcut.Key;
+
+    internal CanvasSettings Normalize()
     {
+        var normalized = this with
+        {
         Language = Enum.IsDefined(Language) ? Language : AppLanguage.English,
         Sound = Enum.IsDefined(Sound) ? Sound : SoundStyle.Bells,
         SoundVolumePercent = Math.Clamp(SoundVolumePercent, 0, 100),
+        CanvasOpacityPercent = Math.Clamp(CanvasOpacityPercent, 10, 100),
+        ExitShortcut = (ExitShortcut ?? DefaultExit).Normalize(DefaultExit),
+        ClearShortcut = (ClearShortcut ?? DefaultClear).Normalize(DefaultClear),
+        MenuShortcut = (MenuShortcut ?? DefaultMenu).Normalize(DefaultMenu),
         BackgroundArgb = BackgroundArgb | unchecked((int)0xFF000000),
         Figures = Enum.IsDefined(Figures) ? Figures : FigureStyle.Random,
         Palette = Enum.IsDefined(Palette) ? Palette : ColorPalette.Bright,
@@ -43,7 +60,12 @@ internal sealed record CanvasSettings
         ObjectLimit = Math.Clamp(ObjectLimit, 100, 1000),
         FigureLifetimeSeconds = Math.Clamp(FigureLifetimeSeconds, 5, 60),
         FramesPerSecond = FramesPerSecond is 30 or 60 or 90 or 120 ? FramesPerSecond : 60
-    };
+        };
+        // Damaged stored shortcuts must not hide access to settings behind another action.
+        return normalized.ExitShortcut.SameChord(normalized.ClearShortcut) || normalized.ExitShortcut.SameChord(normalized.MenuShortcut) || normalized.ClearShortcut.SameChord(normalized.MenuShortcut)
+            ? normalized with { ExitShortcut = DefaultExit, ClearShortcut = DefaultClear, MenuShortcut = DefaultMenu }
+            : normalized;
+    }
 }
 
 internal static class SettingsStore
