@@ -277,7 +277,7 @@ internal sealed class CanvasForm : Form
         SetCanvasActive(false);
         try
         {
-            using var menu = new SettingsForm(settings);
+            using var menu = new SettingsForm(settings, sounds);
             // Center on the primary display instead of the midpoint between monitors.
             menu.StartPosition = FormStartPosition.Manual;
             var screen = (Screen.PrimaryScreen ?? Screen.AllScreens[0]).WorkingArea;
@@ -300,7 +300,6 @@ internal sealed class CanvasForm : Form
                 BackColor = Color.FromArgb(settings.BackgroundArgb);
                 Opacity = settings.TransparentCanvas ? settings.CanvasOpacityPercent / 100.0 : 1;
                 scene.ApplySettings(settings);
-                sounds.ApplySettings(settings);
                 repaintNeeded = true;
                 clock?.SetFrameRate(settings.FramesPerSecond);
                 try
@@ -318,6 +317,7 @@ internal sealed class CanvasForm : Form
         }
         finally
         {
+            sounds.ApplySettings(settings);
             settingsOpen = false;
             previousFrame = InputBuffer.Now;
             SetCanvasActive(NativeMethods.GetForegroundWindow() == Handle && NativeMethods.IsInputDesktop(canvasDesktop));

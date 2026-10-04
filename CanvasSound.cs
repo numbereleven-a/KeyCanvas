@@ -9,8 +9,10 @@ internal sealed class CanvasSound : IDisposable
     private bool enabled;
     private int velocity;
     private SoundStyle style;
+    private readonly SoftCanvasSound softSounds = new();
+    internal static bool IsSoft(SoundStyle style) => style is SoundStyle.SoftPiano or SoundStyle.SoftBells or SoundStyle.SoftXylophone;
     private readonly System.Windows.Forms.Timer releases = new() { Interval = 25 };
-    internal bool Available => device != 0;
+    internal bool Available => IsSoft(style) || device != 0;
 
     internal CanvasSound()
     {
@@ -29,6 +31,9 @@ internal sealed class CanvasSound : IDisposable
         enabled = settings.SoundsEnabled && settings.SoundVolumePercent > 0;
         velocity = Math.Clamp((int)Math.Round(settings.SoundVolumePercent * 1.27), 1, 127);
         style = settings.Sound;
+        softSounds.ApplySettings(settings with { SoundsEnabled = enabled && IsSoft(style) });
+        if (IsSoft(style))
+            return;
         if (enabled && device == 0)
             midiOutOpen(out device, uint.MaxValue, 0, 0, 0);
         if (device != 0)
@@ -43,6 +48,11 @@ internal sealed class CanvasSound : IDisposable
 
     internal void Play(int key, double now, bool held = false)
     {
+        if (IsSoft(style))
+        {
+            softSounds.Play(key, now);
+            return;
+        }
         if (!enabled || device == 0)
             return;
         Release(key);
@@ -73,6 +83,7 @@ internal sealed class CanvasSound : IDisposable
     internal void Stop()
     {
         releases.Stop();
+        softSounds.Stop();
         if (device != 0)
         {
             Send(0xB0, 120, 0); // All sound off, including release tails when leaving the canvas.
@@ -100,6 +111,7 @@ internal sealed class CanvasSound : IDisposable
         }
         enabled = false;
         releases.Dispose();
+        softSounds.Dispose();
     }
 
     [DllImport("winmm.dll")] private static extern uint midiOutOpen(out nint handle, uint device, nint callback, nint instance, uint flags);

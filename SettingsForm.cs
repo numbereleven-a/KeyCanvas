@@ -31,7 +31,8 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox showFps = Toggle();
     private readonly CheckBox startupHints = new() { Name = "StartupHints", AutoSize = true, Margin = new Padding(0, 4, 0, 4) };
     private readonly CheckBox soundEnabled = Toggle();
-    private readonly CanvasSound previewSound = new();
+    private readonly CanvasSound previewSound;
+    private readonly bool ownsPreviewSound;
     private readonly List<(Control Control, string English, string Russian)> translations = new();
     private AppLanguage SelectedLanguage => (AppLanguage)language.SelectedIndex;
     private Color backgroundColor;
@@ -53,9 +54,12 @@ internal sealed class SettingsForm : Form
         ExitShortcut = exitShortcut.Selected, ClearShortcut = clearShortcut.Selected, MenuShortcut = menuShortcut.Selected
     };
 
-    internal SettingsForm(CanvasSettings settings)
+    internal SettingsForm(CanvasSettings settings, CanvasSound? sharedSound = null)
     {
+        ownsPreviewSound = sharedSound is null;
+        previewSound = sharedSound ?? new();
         language.Name = "Language";
+        sound.Name = "Sound";
         Font = bodyFont;
         BackColor = Color.FromArgb(248, 249, 252);
         ForeColor = Color.FromArgb(30, 36, 54);
@@ -104,7 +108,7 @@ internal sealed class SettingsForm : Form
             previewSound.ApplySettings(SelectedSettings with { SoundsEnabled = true });
             previewSound.Play(0, InputBuffer.Now);
             if (!previewSound.Available && SelectedSettings.SoundVolumePercent > 0)
-                MessageBox.Show(this, UiText.Pick(SelectedLanguage, "Windows MIDI output is unavailable.", "MIDI-устройство Windows недоступно."), Text);
+                MessageBox.Show(this, UiText.Pick(SelectedLanguage, "Could not open Windows MIDI output. It may be in use. You can choose a soft sound instead.", "Не удалось открыть MIDI-устройство Windows. Оно может быть занято. Можно выбрать мягкий звук."), Text);
         };
         AddRow(layout, "Sound preview", "Проверить звук", preview);
         Translate(trail, "Draw a trail when the mouse moves", "Рисовать след при движении мыши");
@@ -234,7 +238,8 @@ internal sealed class SettingsForm : Form
             ? ["Яркая", "Пастельная", "Тёплая", "Холодная"] : ["Bright", "Pastel", "Warm", "Cool"]);
         sound.Items.Clear();
         sound.Items.AddRange(SelectedLanguage == AppLanguage.Russian
-            ? ["Пианино", "Колокольчики", "Ксилофон", "Синтезатор"] : ["Piano", "Bells", "Xylophone", "Synthesizer"]);
+            ? ["Пианино (MIDI)", "Колокольчики (MIDI)", "Ксилофон (MIDI)", "Синтезатор (MIDI)", "Мягкое пианино", "Мягкие колокольчики", "Мягкий ксилофон"]
+            : ["Piano (MIDI)", "Bells (MIDI)", "Xylophone (MIDI)", "Synthesizer (MIDI)", "Soft piano", "Soft bells", "Soft xylophone"]);
         figures.SelectedIndex = figure;
         palette.SelectedIndex = colors;
         sound.SelectedIndex = timbre;
@@ -287,7 +292,10 @@ internal sealed class SettingsForm : Form
         base.Dispose(disposing);
         if (disposing)
         {
-            previewSound.Dispose();
+            if (ownsPreviewSound)
+                previewSound.Dispose();
+            else
+                previewSound.Stop();
             bodyFont.Dispose();
             headingFont.Dispose();
         }

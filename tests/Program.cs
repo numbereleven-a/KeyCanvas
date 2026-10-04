@@ -504,7 +504,7 @@ internal static class Program
             var defaults = new CanvasSettings();
             Check(defaults.Language == AppLanguage.English && defaults.ObjectLimit == 500 &&
                 defaults.FigureLifetimeSeconds == 5 && !defaults.ShowFps && !defaults.ShowFrameTiming && defaults.ShowStartupHints &&
-                defaults.SoundsEnabled && defaults.Sound == SoundStyle.Bells && defaults.SoundVolumePercent == 15,
+                defaults.SoundsEnabled && defaults.Sound == SoundStyle.Piano && defaults.SoundVolumePercent == 15,
                 "Other Windows languages must use English with the requested visual and FPS defaults.");
         }
         finally { CultureInfo.CurrentUICulture = original; }
@@ -760,8 +760,38 @@ internal static class Program
         audio.Update(held, InputBuffer.Now);
         audio.ApplySettings(new() { SoundsEnabled = false });
         audio.Play((int)Keys.A, InputBuffer.Now);
+        // The canvas keeps MIDI open while its menu previews instruments.
+        audio.ApplySettings(new() { Sound = SoundStyle.Piano });
+        bool midiAvailable = audio.Available;
+        Console.WriteLine(midiAvailable ? "MIDI preview output opened successfully." : "MIDI output unavailable; checking the original PCM sounds.");
+        using (var menu = new SettingsForm(new(), audio))
+        using (var host = ShowPreview(menu))
+        {
+            var layout = menu.Controls.Find("OptionsLayout", true).Single();
+            var choice = layout.Controls.OfType<ComboBox>().Single(control => control.Name == "Sound");
+            var listen = layout.Controls.OfType<Button>().Single(control => control.Name == "PreviewSound");
+            Check(choice.Items.Count == 7, "The original three sounds must remain alongside the four MIDI instruments.");
+            foreach (SoundStyle timbre in Enum.GetValues<SoundStyle>())
+            {
+                if (!midiAvailable && !CanvasSound.IsSoft(timbre)) continue;
+                choice.SelectedIndex = (int)timbre;
+                listen.PerformClick();
+                Check(audio.Available, "Menu preview must use the already-open audio output.");
+            }
+        }
+        audio.ApplySettings(new() { Sound = SoundStyle.Piano });
+        Check(!midiAvailable || audio.Available, "Closing the menu must not dispose the canvas audio output.");
+        foreach (SoundStyle timbre in new[] { SoundStyle.SoftPiano, SoundStyle.SoftBells, SoundStyle.SoftXylophone })
+        {
+            byte[] restored = SoftCanvasSound.CreateWave(timbre, 15, 0);
+            Check(restored.Length == 17684 && BitConverter.ToInt32(restored, 24) == 22050,
+                "Original sounds must retain their PCM format and duration.");
+            using var stream = new MemoryStream(restored);
+            using var player = new SoundPlayer(stream);
+            player.Load();
+        }
         var normalized = (new CanvasSettings { Sound = (SoundStyle)99, SoundVolumePercent = 999 }).Normalize();
-        Check(normalized.Sound == SoundStyle.Bells && normalized.SoundVolumePercent == 100,
+        Check(normalized.Sound == SoundStyle.Piano && normalized.SoundVolumePercent == 100,
             "Stored sound preferences must be constrained before playback.");
     }
     private static void SaveScreenshot(Form form, string path)

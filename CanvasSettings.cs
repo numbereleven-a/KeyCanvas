@@ -4,7 +4,7 @@ namespace KeyCanvas;
 
 internal enum FigureStyle { Random, Circle, Triangle, Square, Star, Line, Ring }
 internal enum ColorPalette { Bright, Pastel, Warm, Cool }
-internal enum SoundStyle { Piano, Bells, Xylophone, Synthesizer }
+internal enum SoundStyle { Piano, Bells, Xylophone, Synthesizer, SoftPiano, SoftBells, SoftXylophone }
 
 internal sealed record CanvasSettings
 {
@@ -29,7 +29,7 @@ internal sealed record CanvasSettings
     public bool ShowFps { get; init; }
     public bool ShowStartupHints { get; init; } = true;
     public bool SoundsEnabled { get; init; } = true;
-    public SoundStyle Sound { get; init; } = SoundStyle.Bells;
+    public SoundStyle Sound { get; init; } = SoundStyle.Piano;
     public int SoundVolumePercent { get; init; } = 15;
     public bool AlphabetMode { get; init; }
     public bool TransparentCanvas { get; init; }
@@ -45,7 +45,7 @@ internal sealed record CanvasSettings
         var normalized = this with
         {
         Language = Enum.IsDefined(Language) ? Language : AppLanguage.English,
-        Sound = Enum.IsDefined(Sound) ? Sound : SoundStyle.Bells,
+        Sound = Enum.IsDefined(Sound) ? Sound : SoundStyle.Piano,
         SoundVolumePercent = Math.Clamp(SoundVolumePercent, 0, 100),
         CanvasOpacityPercent = Math.Clamp(CanvasOpacityPercent, 10, 100),
         ExitShortcut = (ExitShortcut ?? DefaultExit).Normalize(DefaultExit),

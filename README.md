@@ -68,14 +68,18 @@ toggled separately.
 
 Defaults: **500 objects**, **5-second shape lifetime**, **60 FPS target**.
 Particles have shorter lifetimes. Old objects fade to keep the scene bounded.
-Quiet **bells are enabled by default**, at **15% application volume**.
-Choose piano, bells, xylophone or synthesizer, adjust the volume, or uncheck
+Quiet **piano is enabled by default**, at **15% application volume**.
+Choose piano, bells, xylophone or synthesizer (MIDI), or the original soft piano,
+soft bells and soft xylophone. Adjust the volume, or uncheck
 **Enable quiet sounds**. **Listen** previews the selected instrument.
-Sound uses the Windows General MIDI synthesizer. Multiple notes can sound
+MIDI instruments use the Windows General MIDI synthesizer. Multiple notes can sound
 together; holding a key holds its note, and releasing it sends note-off.
 Piano and percussion naturally decay even during a hold. Mouse clicks and
 scrolling play short notes; movement remains silent. Instrument quality and
-availability depend on the Windows MIDI output device.
+availability depend on the Windows MIDI output device. The original three soft
+sounds use cached PCM audio and do not require MIDI. They play short notes,
+with rapid presses replacing the previous note. The menu shares the canvas
+MIDI output for previews and restores the chosen instrument after cancellation.
 
 Enable **Alphabet and key names** to draw letters, numbers and key names
 instead of keyboard shapes. Letters follow the current keyboard layout,
