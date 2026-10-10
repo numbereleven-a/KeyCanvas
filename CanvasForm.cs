@@ -220,12 +220,12 @@ internal sealed class CanvasForm : Form
     private void RecoverKeyboard()
     {
         double now = InputBuffer.Now;
-        if (!canvasActive || settingsOpen || keyboard is null || !keyboard.IsResponsive || now < nextHookRecovery)
+        if ((!canvasActive && !settingsOpen) || keyboard is null || !keyboard.IsResponsive || now < nextHookRecovery)
             return;
         nextHookRecovery = now + 1;
         keyboard.Dispose();
         keyboard = new KeyboardHook(input, Handle);
-        keyboard.SetMode(KeyboardMode.Canvas);
+        keyboard.SetMode(settingsOpen ? KeyboardMode.Menu : KeyboardMode.Canvas);
         scene.ReleaseHeld();
     }
 
@@ -266,7 +266,10 @@ internal sealed class CanvasForm : Form
         using var filled = new Pen(ink, 4 * scale);
         using var brush = new SolidBrush(ink);
         graphics.DrawEllipse(track, x, y, 48 * scale, 48 * scale);
-        graphics.DrawArc(filled, x, y, 48 * scale, 48 * scale, -90, (float)progress * 360);
+        float sweep = (float)progress * 360;
+        // GDI+ can fail to construct a sub-pixel arc at screen coordinates.
+        if (sweep >= 1)
+            graphics.DrawArc(filled, x, y, 48 * scale, 48 * scale, -90, sweep);
         using var format = new StringFormat { Alignment = StringAlignment.Center };
         graphics.DrawString(text, indicatorFont, brush, new RectangleF(x - 20 * scale, y + 54 * scale, 88 * scale, 24 * scale), format);
     }
@@ -278,15 +281,8 @@ internal sealed class CanvasForm : Form
         try
         {
             using var menu = new SettingsForm(settings, sounds);
-            // Center on the primary display instead of the midpoint between monitors.
+            menu.KeyboardInputReceived += RecoverKeyboard;
             menu.StartPosition = FormStartPosition.Manual;
-            var screen = (Screen.PrimaryScreen ?? Screen.AllScreens[0]).WorkingArea;
-            menu.Load += (_, _) =>
-            {
-                menu.Size = new Size(Math.Min(menu.Width, screen.Width), Math.Min(menu.Height, screen.Height));
-                menu.Location = new Point(screen.Left + (screen.Width - menu.Width) / 2,
-                    screen.Top + (screen.Height - menu.Height) / 2);
-            };
             if (menu.ShowDialog(this) == DialogResult.OK)
             {
                 settings = menu.SelectedSettings;
@@ -390,10 +386,15 @@ internal sealed class CanvasForm : Form
             }
             return;
         }
-        // Suppress ordinary window close while the canvas is active.
+        // Suppress close and window-switching commands while the canvas is active.
         if (m.Msg == 0x112 && NativeMethods.GetForegroundWindow() == Handle &&
-            ((long)m.WParam & 0xFFF0) == 0xF060)
+            ((long)m.WParam & 0xFFF0) is 0xF060 or 0xF040 or 0xF050)
             return;
+        if (m.Msg == 0x319 && NativeMethods.GetForegroundWindow() == Handle && !settingsOpen)
+        {
+            m.Result = 1; // Consume application commands instead of forwarding them to the shell.
+            return;
+        }
         base.WndProc(ref m);
     }
 

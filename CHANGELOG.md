@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.0 — 2026-10-10
+
+### Changed
+- Settings can be resized and maximized. They open maximized when their scaled size exceeds the display.
+- Settings headings scroll with the options, leaving more room on smaller screens.
+- Soft piano is the default sound at 15% volume. Previously saved sound choices remain unchanged.
+
+### Fixed
+- Prevented GDI+ errors from sub-pixel shortcut indicator arcs at the start of a hold.
+- Deferred initial settings DPI scaling until all controls are assembled.
+- Adjusted dropdown rows and tab headers to enlarged fonts; wrapped long checkbox labels at narrow widths.
+- Alt+Tab uses held Alt state even when an injected event omits its Alt flag.
+- Restored keyboard capture when keys reach settings after the hook is removed.
+- Consumed window-switching system commands and application commands on the active canvas. Touchpad gestures that bypass application input still require configuration in Windows or the driver.
+
 ## 1.1.0 — 2026-10-04
 
 ### Added

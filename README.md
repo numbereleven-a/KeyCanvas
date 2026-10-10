@@ -1,4 +1,4 @@
-# KeyCanvas 1.1
+# KeyCanvas 1.2
 
 [Russian README](README.ru.md)
 
@@ -16,7 +16,7 @@ Use it for:
 
 ## Download and start
 
-Download **KeyCanvas-1.1.0-win-x64.zip** from the
+Download **KeyCanvas-1.2.0-win-x64.zip** from the
 [latest release](https://github.com/numbereleven-a/KeyCanvas/releases/latest),
 extract it, and run `KeyCanvas.exe`. The portable build includes .NET.
 
@@ -59,6 +59,9 @@ action. Repeat the action by releasing and holding the key again.
 Settings are grouped into Appearance, Shapes, Performance & Audio, and
 Interaction cards. Sliders and numeric fields stay synchronized. Cards stack
 on narrow screens; Defaults, Cancel and Apply remain at the bottom.
+Resize or maximize the settings window. It opens maximized when its scaled size
+would exceed the display; the heading scrolls with the options to leave more room
+on laptops with enlarged text or 200% display scaling.
 
 Choose **ENG** or **RUS** directly in the menu. On first launch, Russian Windows
 display language selects Russian; other Windows display languages select
@@ -72,7 +75,7 @@ toggled separately.
 
 Defaults: **500 objects**, **5-second shape lifetime**, **60 FPS target**.
 Particles have shorter lifetimes. Old objects fade to keep the scene bounded.
-Quiet **piano is enabled by default**, at **15% application volume**.
+Quiet **soft piano is enabled by default**, at **15% application volume**.
 Choose piano, bells, xylophone or synthesizer (MIDI), or the original soft piano,
 soft bells and soft xylophone. Adjust the volume, or uncheck
 **Enable quiet sounds**. **Listen** previews the selected instrument.
@@ -122,6 +125,10 @@ Windows dialogs follow the Windows display language.
 KeyCanvas is a desktop application, not a locked-down Windows account or kiosk.
 Ctrl+Alt+Delete remains available. Windows accessibility dialogs, touch edge
 gestures and elevated applications can interrupt play. Do not run it as administrator.
+Some touchpad drivers and system gestures switch windows without delivering
+ordinary keyboard events to the canvas. If a gesture still escapes capture,
+disable its window-switching action in Windows touchpad settings or the driver's
+control panel. See [Windows gesture settings](https://support.microsoft.com/en-gb/windows/hardware/input-devices/touch-gestures-for-windows).
 
 When the canvas loses focus, it releases keyboard capture and the cursor, and
 moves behind the active window. Launching it again attempts to restore the
@@ -139,15 +146,16 @@ Use Windows and .NET SDK 10 with Windows Desktop support.
 ```powershell
 dotnet build KeyCanvas.csproj -c Release
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release
-dotnet publish KeyCanvas.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o artifacts/1.1.0/release/win-x64
+dotnet publish KeyCanvas.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o artifacts/1.2.0/release/win-x64
 ```
 
 Optional checks:
 
 ```powershell
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --menu-check
+dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --dpi-check
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --new-modes-check
-dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --release-check artifacts/1.1.0/release/win-x64/KeyCanvas.exe
+dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --release-check artifacts/1.2.0/release/win-x64/KeyCanvas.exe
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --benchmark
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --window-benchmark
 dotnet run --project tests/KeyCanvas.Tests.csproj -c Release -- --screenshots docs/images

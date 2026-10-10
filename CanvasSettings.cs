@@ -29,7 +29,7 @@ internal sealed record CanvasSettings
     public bool ShowFps { get; init; }
     public bool ShowStartupHints { get; init; } = true;
     public bool SoundsEnabled { get; init; } = true;
-    public SoundStyle Sound { get; init; } = SoundStyle.Piano;
+    public SoundStyle Sound { get; init; } = SoundStyle.SoftPiano;
     public int SoundVolumePercent { get; init; } = 15;
     public bool AlphabetMode { get; init; }
     public bool TransparentCanvas { get; init; }
@@ -45,7 +45,7 @@ internal sealed record CanvasSettings
         var normalized = this with
         {
         Language = Enum.IsDefined(Language) ? Language : AppLanguage.English,
-        Sound = Enum.IsDefined(Sound) ? Sound : SoundStyle.Piano,
+        Sound = Enum.IsDefined(Sound) ? Sound : SoundStyle.SoftPiano,
         SoundVolumePercent = Math.Clamp(SoundVolumePercent, 0, 100),
         CanvasOpacityPercent = Math.Clamp(CanvasOpacityPercent, 10, 100),
         ExitShortcut = (ExitShortcut ?? DefaultExit).Normalize(DefaultExit),

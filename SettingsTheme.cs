@@ -90,8 +90,10 @@ internal sealed class SettingsToggle : CheckBox
     }
     public override Size GetPreferredSize(Size proposedSize)
     {
-        var text = TextRenderer.MeasureText(Text, Font);
-        return new Size(text.Width + (int)(32 * DeviceDpi / 96f), Math.Max(text.Height, (int)(24 * DeviceDpi / 96f)));
+        int gap = (int)(32 * DeviceDpi / 96f);
+        int width = proposedSize.Width > gap ? proposedSize.Width - gap : int.MaxValue;
+        var text = TextRenderer.MeasureText(Text, Font, new Size(width, int.MaxValue), TextFormatFlags.WordBreak);
+        return new Size(text.Width + gap, Math.Max(text.Height, (int)(24 * DeviceDpi / 96f)));
     }
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -112,7 +114,7 @@ internal sealed class SettingsToggle : CheckBox
                 new PointF(box.X + side * .43f, box.Y + side * .72f), new PointF(box.X + side * .8f, box.Y + side * .27f)]);
         }
         TextRenderer.DrawText(e.Graphics, Text, Font, new Rectangle((int)(29 * scale), 0, Width - (int)(29 * scale), Height),
-            Enabled ? ForeColor : SystemColors.GrayText, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            Enabled ? ForeColor : SystemColors.GrayText, TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
         if (Focused) ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -1, -1));
     }
 }
@@ -182,6 +184,28 @@ internal sealed class SettingsTabs : TabControl
         SizeMode = TabSizeMode.Fixed;
         Padding = new Point(18, 8);
     }
+    protected override void OnFontChanged(EventArgs e)
+    {
+        base.OnFontChanged(e);
+        UpdateTabSize();
+    }
+    protected override void OnDpiChangedAfterParent(EventArgs e)
+    {
+        base.OnDpiChangedAfterParent(e);
+        UpdateTabSize();
+    }
+    protected override void OnLayout(LayoutEventArgs e)
+    {
+        base.OnLayout(e);
+        UpdateTabSize();
+    }
+    private void UpdateTabSize()
+    {
+        int width = Math.Max(180 * DeviceDpi / 96, TabPages.Cast<TabPage>()
+            .Select(page => TextRenderer.MeasureText(page.Text, Font).Width + 32 * DeviceDpi / 96).DefaultIfEmpty(0).Max());
+        var size = new Size(width, Font.Height + 18 * DeviceDpi / 96);
+        if (ItemSize != size) ItemSize = size;
+    }
     protected override void OnPaint(PaintEventArgs e)
     {
         e.Graphics.Clear(Color.FromArgb(248, 249, 252));
@@ -196,7 +220,8 @@ internal sealed class SettingsTabs : TabControl
         bool selected = e.Index == SelectedIndex;
         using var labelFont = new Font(Font, selected ? FontStyle.Bold : FontStyle.Regular);
         TextRenderer.DrawText(e.Graphics, TabPages[e.Index].Text, labelFont, e.Bounds,
-            selected ? SettingsTheme.Purple : SettingsTheme.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            selected ? SettingsTheme.Purple : SettingsTheme.Muted,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
         if (selected)
         {
             using var pen = new Pen(SettingsTheme.Purple, 4);
@@ -207,7 +232,15 @@ internal sealed class SettingsTabs : TabControl
 
 internal sealed class SettingsHero : Panel
 {
-    internal SettingsHero() { DoubleBuffered = true; Height = 128; Dock = DockStyle.Top; Padding = new Padding(22, 18, 210, 12); }
+    internal SettingsHero()
+    {
+        DoubleBuffered = true;
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        MinimumSize = new Size(0, 128);
+        Dock = DockStyle.Top;
+        Padding = new Padding(22, 18, 210, 12);
+    }
     protected override void OnSizeChanged(EventArgs e)
     {
         base.OnSizeChanged(e);

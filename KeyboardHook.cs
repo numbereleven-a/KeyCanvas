@@ -24,6 +24,7 @@ internal sealed class KeyboardPolicy
             return false;
         pressed[key] = down;
         bool control = pressed[0x11] || pressed[0xA2] || pressed[0xA3];
+        alt |= pressed[0x12] || pressed[0xA4] || pressed[0xA5];
         bool suppress = mode == KeyboardMode.Canvas || mode == KeyboardMode.Menu &&
             (key is 0x5B or 0x5C or 0x5D || alt && key is 0x09 or 0x1B || control && key == 0x1B);
         if (down)

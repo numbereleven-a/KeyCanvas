@@ -38,6 +38,7 @@ internal sealed class SettingsForm : Form
     private readonly List<(Control Control, string English, string Russian)> translations = new();
     private AppLanguage SelectedLanguage => (AppLanguage)language.SelectedIndex;
     private Color backgroundColor;
+    internal event Action? KeyboardInputReceived;
 
     internal CanvasSettings SelectedSettings => new()
     {
@@ -58,6 +59,7 @@ internal sealed class SettingsForm : Form
 
     internal SettingsForm(CanvasSettings settings, CanvasSound? sharedSound = null)
     {
+        SuspendLayout();
         ownsPreviewSound = sharedSound is null;
         previewSound = sharedSound ?? new();
         language.Name = "Language";
@@ -65,9 +67,10 @@ internal sealed class SettingsForm : Form
         Font = bodyFont;
         BackColor = Color.FromArgb(248, 249, 252);
         ForeColor = SettingsTheme.Ink;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false;
+        FormBorderStyle = FormBorderStyle.Sizable;
+        MaximizeBox = true;
         MinimizeBox = false;
+        KeyPreview = true;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
         AutoScaleMode = AutoScaleMode.Dpi;
@@ -86,7 +89,7 @@ internal sealed class SettingsForm : Form
         var audio = Card(layout, 1, 0, "Performance & Audio", "Производительность и звук", "Frame rate and sound settings.", "Частота кадров и настройки звука.", "⚙", Color.FromArgb(221, 248, 236));
         var interaction = Card(layout, 1, 1, "Interaction", "Взаимодействие", "Choose how the canvas responds to input.", "Выберите реакцию полотна на нажатия.", "↗", Color.FromArgb(225, 239, 255));
         var hero = new SettingsHero();
-        var heroText = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, BackColor = Color.Transparent };
+        var heroText = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, BackColor = Color.Transparent };
         AddWide(heroText, Translate(new Label { Font = headingFont, AutoSize = true, Margin = Padding.Empty }, "Make the canvas yours", "Полотно на ваш вкус"));
         AddWide(heroText, Translate(new Label { Font = bodyFont, AutoSize = true, ForeColor = SettingsTheme.Muted, Margin = new Padding(0, 6, 0, 0) },
             "Customize how shapes look, move and react on your screen.", "Настройте вид фигур, их движение и реакцию на нажатия."));
@@ -166,8 +169,8 @@ internal sealed class SettingsForm : Form
         canvasTab.BackColor = BackColor;
         var viewport = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = BackColor };
         viewport.Controls.Add(layout);
+        viewport.Controls.Add(hero);
         canvasTab.Controls.Add(viewport);
-        canvasTab.Controls.Add(hero);
         viewport.Resize += (_, _) =>
         {
             bool narrow = viewport.ClientSize.Width < 900 * DeviceDpi / 96;
@@ -203,13 +206,13 @@ internal sealed class SettingsForm : Form
         var shortcutViewport = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(22, 0, 22, 22), BackColor = BackColor };
         shortcutViewport.Controls.Add(shortcutCard);
         var shortcutHero = new SettingsHero();
-        var shortcutHeroText = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, BackColor = Color.Transparent };
+        var shortcutHeroText = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, BackColor = Color.Transparent };
         AddWide(shortcutHeroText, Translate(new Label { Font = headingFont, AutoSize = true, Margin = Padding.Empty }, "Your shortcuts", "Ваши горячие клавиши"));
         AddWide(shortcutHeroText, Translate(new Label { Font = bodyFont, AutoSize = true, ForeColor = SettingsTheme.Muted, Margin = new Padding(0, 6, 0, 0) },
             "Choose how to unlock, clear and open settings.", "Настройте выход, очистку и открытие настроек."));
         shortcutHero.Controls.Add(shortcutHeroText);
+        shortcutViewport.Controls.Add(shortcutHero);
         shortcutTab.Controls.Add(shortcutViewport);
-        shortcutTab.Controls.Add(shortcutHero);
         tabs.TabPages.AddRange([canvasTab, shortcutTab]);
         Controls.Add(tabs);
         Controls.Add(buttons);
@@ -224,6 +227,30 @@ internal sealed class SettingsForm : Form
             if (picker.ShowDialog(this) == DialogResult.OK)
                 SetBackground(picker.Color);
         };
+        ResumeLayout(true);
+    }
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        if (!TopLevel) return;
+        var screen = Screen.FromControl(Owner ?? this).WorkingArea;
+        bool needsMoreRoom = Width > screen.Width || Height > screen.Height;
+        Size = new Size(Math.Min(Width, screen.Width), Math.Min(Height, screen.Height));
+        Location = new Point(screen.Left + (screen.Width - Width) / 2, screen.Top + (screen.Height - Height) / 2);
+        if (needsMoreRoom) WindowState = FormWindowState.Maximized;
+    }
+
+    protected override bool ProcessKeyPreview(ref Message m)
+    {
+        if (m.Msg is 0x100 or 0x104) KeyboardInputReceived?.Invoke();
+        return base.ProcessKeyPreview(ref m);
+    }
+
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (msg.Msg is 0x100 or 0x104) KeyboardInputReceived?.Invoke();
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     private void SetValues(CanvasSettings settings)
@@ -328,6 +355,8 @@ internal sealed class SettingsForm : Form
         var choice = new ComboBox { FlatStyle = FlatStyle.Flat, BackColor = Color.White, DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
         choice.DrawMode = DrawMode.OwnerDrawFixed;
         choice.ItemHeight = 24;
+        choice.FontChanged += (_, _) => choice.ItemHeight = choice.Font.Height + 10 * choice.DeviceDpi / 96;
+        choice.DpiChangedAfterParent += (_, _) => choice.ItemHeight = choice.Font.Height + 10 * choice.DeviceDpi / 96;
         choice.DrawItem += (_, e) =>
         {
             if (e.Index < 0) return;
@@ -377,6 +406,7 @@ internal sealed class SettingsForm : Form
 
     private static void AddWide(TableLayoutPanel layout, Control control)
     {
+        if (control is SettingsToggle) control.Dock = DockStyle.Top;
         int row = layout.RowCount++;
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.Controls.Add(control, 0, row);

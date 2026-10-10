@@ -18,6 +18,12 @@ internal static class Program
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
             Application.EnableVisualStyles();
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+            if (args.Length is 1 or 2 && args[0] == "--dpi-check")
+            {
+                TestLargeSettings(args.Length == 2 ? args[1] : null);
+                Console.WriteLine("Passed: simulated 200% DPI, resized settings, scrolling and maximized action buttons.");
+                return 0;
+            }
             if (args.Length == 2 && args[0] == "--screenshots")
             {
                 CaptureScreenshots(args[1]);
@@ -61,6 +67,7 @@ internal static class Program
             TestLocalization();
             TestSound();
             TestNewModes();
+            TestIndicator();
             Render(args.Length == 2 && args[0] == "--render" ? args[1] : null);
             Console.WriteLine("Passed: input transitions, timed gestures, bounded scene, rendering, hook lifetime, frame clock, settings.");
             return 0;
@@ -117,8 +124,9 @@ internal static class Program
             }, 5000), "Portable F12 must show and activate its own settings.");
             SendKey(Keys.Escape, true);
             SendKey(Keys.Escape, false);
-            Thread.Sleep(300);
-            Check(NativeMethods.GetForegroundWindow() == canvas, "Cancel must return to the portable canvas.");
+            Check(SpinWait.SpinUntil(() => NativeMethods.GetForegroundWindow() == canvas || process.HasExited, 5000) && !process.HasExited,
+                "Cancel must return to the portable canvas.");
+            Thread.Sleep(300); // Allow modal cleanup to finish after the owner regains focus.
             SendKey(Keys.Escape, true);
             Check(process.WaitForExit(6500) && process.ExitCode == 0, "Five-second Esc must close the portable application cleanly.");
             SendKey(Keys.Escape, false);
@@ -228,6 +236,10 @@ internal static class Program
 
     private static void TestKeyboardPolicy()
     {
+        var driverPolicy = new KeyboardPolicy();
+        driverPolicy.Suppress(KeyboardMode.Menu, (int)Keys.LMenu, true, false);
+        Check(driverPolicy.Suppress(KeyboardMode.Menu, (int)Keys.Tab, true, false),
+            "Injected Tab must respect held Alt even without the native Alt flag.");
         var policy = new KeyboardPolicy();
         Check(policy.Suppress(KeyboardMode.Menu, (int)Keys.LWin, true, false), "Menu must suppress Win.");
         Check(policy.Suppress(KeyboardMode.Menu, (int)Keys.LWin, false, false), "Menu must suppress the Win release.");
@@ -346,6 +358,18 @@ internal static class Program
         }
     }
 
+    private static void TestIndicator()
+    {
+        using var canvas = new CanvasForm(new() { SoundsEnabled = false, ShowStartupHints = false });
+        using var bitmap = new Bitmap(1680, 1050);
+        using var graphics = Graphics.FromImage(bitmap);
+        typeof(CanvasForm).GetField("primaryViewport", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(canvas, new Rectangle(0, 0, 1680, 1050));
+        var draw = typeof(CanvasForm).GetMethod("DrawIndicator", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        foreach (double progress in new[] { 8.820000039122533e-6, .001, .5, 1 })
+            draw.Invoke(canvas, [graphics, progress, 28, "Quit"]);
+    }
+
     private static void TestSettings()
     {
         var selected = new CanvasSettings
@@ -450,6 +474,88 @@ internal static class Program
         Check(scene.Objects.Count == 1, "Disabled mouse options must stop mouse drawing.");
     }
 
+    private static void TestLargeSettings(string? screenshotDirectory)
+    {
+        using var menu = new SettingsForm(new() { Language = AppLanguage.Russian, SoundsEnabled = false });
+        menu.Show();
+        Application.DoEvents();
+        var area = Screen.FromControl(menu).WorkingArea;
+        var enlargedFonts = new Dictionary<Font, Font>();
+        nint bounds = Marshal.AllocHGlobal(16);
+        try
+        {
+            Marshal.WriteInt32(bounds, 0, area.Left);
+            Marshal.WriteInt32(bounds, 4, area.Top);
+            Marshal.WriteInt32(bounds, 8, area.Right);
+            Marshal.WriteInt32(bounds, 12, area.Bottom);
+            SendMessage(menu.Handle, 0x2E0, (nint)(192 | (192 << 16)), bounds);
+            Application.DoEvents();
+            Check(menu.DeviceDpi == 192, "DPI simulation must use 200% control scaling.");
+            // Synthetic WM_DPICHANGED does not change the monitor's font scaling.
+            var pending = new Queue<Control>();
+            var originalFonts = new List<(Control Control, Font Font)>();
+            pending.Enqueue(menu);
+            while (pending.TryDequeue(out var control))
+            {
+                originalFonts.Add((control, control.Font));
+                foreach (Control child in control.Controls) pending.Enqueue(child);
+            }
+            foreach (var item in originalFonts)
+            {
+                if (!enlargedFonts.TryGetValue(item.Font, out var font))
+                    enlargedFonts.Add(item.Font, font = new Font(item.Font.FontFamily, item.Font.Size * 2, item.Font.Style));
+                item.Control.Font = font;
+            }
+            menu.Size = new Size(1280, 800);
+            Application.DoEvents();
+            var layout = (TableLayoutPanel)menu.Controls.Find("OptionsLayout", true).Single();
+            var viewport = (Panel)layout.Parent!;
+            Check(layout.ColumnCount == 1, "High-DPI narrow settings must use one column.");
+            var choice = menu.Controls.Find("Sound", true).OfType<ComboBox>().Single();
+            viewport.ScrollControlIntoView(choice);
+            Application.DoEvents();
+            Check(viewport.RectangleToScreen(viewport.ClientRectangle).Contains(choice.RectangleToScreen(choice.ClientRectangle)),
+                "Sound choices must be reachable by scrolling at 200% DPI.");
+            choice.SelectedIndex = (int)SoundStyle.SoftBells;
+            Check(menu.SelectedSettings.Sound == SoundStyle.SoftBells, "High-DPI sound choices must remain editable.");
+            using var largeFont = new Font(choice.Font.FontFamily, choice.Font.Size * 2);
+            var originalFont = choice.Font;
+            choice.Font = largeFont;
+            Check(choice.ItemHeight >= choice.Font.Height, "Dropdown rows must fit enlarged text.");
+            choice.Font = originalFont;
+            menu.WindowState = FormWindowState.Maximized;
+            Application.DoEvents();
+            var footer = menu.Controls.Find("ActionButtons", true).Single();
+            Check(menu.MaximizeBox && menu.ClientRectangle.Contains(footer.Bounds), "Maximized settings must retain their action buttons.");
+            foreach (Control button in footer.Controls.OfType<Button>())
+                Check(footer.ClientRectangle.Contains(button.Bounds), "Every footer action must fit at 200% DPI.");
+            if (screenshotDirectory is not null)
+            {
+                menu.TopMost = true;
+                SendKey(Keys.F24, true); SendKey(Keys.F24, false);
+                menu.Activate();
+                NativeMethods.SetForegroundWindow(menu.Handle);
+                Directory.CreateDirectory(screenshotDirectory);
+                menu.Refresh();
+                Application.DoEvents();
+                Thread.Sleep(150);
+                Check(NativeMethods.GetForegroundWindow() == menu.Handle,
+                    "DPI screenshots must capture only the foreground settings window.");
+                var visibleBounds = Rectangle.Intersect(menu.Bounds, area);
+                using var bitmap = new Bitmap(visibleBounds.Width, visibleBounds.Height);
+                using (var graphics = Graphics.FromImage(bitmap))
+                    graphics.CopyFromScreen(visibleBounds.Location, Point.Empty, bitmap.Size);
+                bitmap.Save(Path.Combine(screenshotDirectory, "settings-200.png"), ImageFormat.Png);
+            }
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(bounds);
+            menu.Dispose();
+            foreach (var font in enlargedFonts.Values) font.Dispose();
+        }
+    }
+
     private static void Benchmark()
     {
         var scene = new CanvasScene(new Random(19));
@@ -518,7 +624,7 @@ internal static class Program
             var defaults = new CanvasSettings();
             Check(defaults.Language == AppLanguage.English && defaults.ObjectLimit == 500 &&
                 defaults.FigureLifetimeSeconds == 5 && !defaults.ShowFps && !defaults.ShowFrameTiming && defaults.ShowStartupHints &&
-                defaults.SoundsEnabled && defaults.Sound == SoundStyle.Piano && defaults.SoundVolumePercent == 15,
+                defaults.SoundsEnabled && defaults.Sound == SoundStyle.SoftPiano && defaults.SoundVolumePercent == 15,
                 "Other Windows languages must use English with the requested visual and FPS defaults.");
         }
         finally { CultureInfo.CurrentUICulture = original; }
@@ -805,7 +911,7 @@ internal static class Program
             player.Load();
         }
         var normalized = (new CanvasSettings { Sound = (SoundStyle)99, SoundVolumePercent = 999 }).Normalize();
-        Check(normalized.Sound == SoundStyle.Piano && normalized.SoundVolumePercent == 100,
+        Check(normalized.Sound == SoundStyle.SoftPiano && normalized.SoundVolumePercent == 100,
             "Stored sound preferences must be constrained before playback.");
     }
     private static void SaveScreenshot(Form form, string path)
@@ -931,6 +1037,7 @@ internal static class Program
         bool checkedEarlyHold = false;
         bool f12Down = false;
         bool requestedFocus = false;
+        bool checkedCanvasShortcuts = false;
         SettingsForm? settingsMenu = null;
         nint colorDialog = 0;
         Form? otherWindow = null;
@@ -943,6 +1050,17 @@ internal static class Program
             switch (stage)
             {
                 case 0:
+                    if (checkedCanvasShortcuts)
+                    {
+                        if (elapsed.Elapsed.TotalSeconds < .2) break;
+                        Check(NativeMethods.GetForegroundWindow() == canvas.Handle,
+                            "Alt+Tab and window-switching system commands must not leave the canvas.");
+                        SendKey(Keys.F12, true);
+                        f12Down = true;
+                        elapsed.Restart();
+                        stage = 1;
+                        break;
+                    }
                     if (NativeMethods.GetForegroundWindow() != canvas.Handle && elapsed.Elapsed.TotalSeconds < 2)
                     {
                         if (!requestedFocus)
@@ -956,10 +1074,13 @@ internal static class Program
                         break;
                     }
                     Check(NativeMethods.GetForegroundWindow() == canvas.Handle, "The canvas must be foreground for the input check.");
-                    SendKey(Keys.F12, true);
-                    f12Down = true;
+                    SendKey(Keys.LMenu, true);
+                    SendKey(Keys.Tab, true);
+                    SendKey(Keys.Tab, false);
+                    SendKey(Keys.LMenu, false);
+                    SendMessage(canvas.Handle, 0x112, 0xF040, 0);
+                    checkedCanvasShortcuts = true;
                     elapsed.Restart();
-                    stage = 1;
                     break;
                 case 1:
                     if (!checkedEarlyHold && elapsed.Elapsed.TotalSeconds >= 1.5)
@@ -974,6 +1095,16 @@ internal static class Program
                         "Two-second F12 hold must open and focus the settings menu.");
                     SendKey(Keys.F12, false);
                     f12Down = false;
+                    var installed = (KeyboardHook)typeof(CanvasForm).GetField("keyboard", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(canvas)!;
+                    typeof(KeyboardHook).GetMethod("RemoveHook", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(installed, null);
+                    SendKey(Keys.A, true); SendKey(Keys.A, false);
+                    elapsed.Restart();
+                    stage = -2;
+                    break;
+                case -2:
+                    if (elapsed.Elapsed.TotalSeconds < .2) break;
+                    var recovered = (KeyboardHook)typeof(CanvasForm).GetField("keyboard", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(canvas)!;
+                    Check(recovered.IsInstalled, "Keyboard capture must recover when keys reach settings controls.");
                     var color = settingsMenu!.Controls.Find("Background", true).OfType<Button>().Single();
                     canvas.BeginInvoke(() => color.PerformClick());
                     elapsed.Restart();
@@ -1132,6 +1263,8 @@ internal static class Program
         }
     }
 
+    [DllImport("user32.dll")]
+    private static extern nint SendMessage(nint window, uint message, nint wParam, nint lParam);
     [DllImport("user32.dll")]
     private static extern nint GetWindow(nint window, uint command);
     [DllImport("user32.dll")]
