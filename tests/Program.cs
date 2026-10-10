@@ -918,10 +918,12 @@ internal static class Program
     {
         form.Activate();
         form.Refresh();
+        Thread.Sleep(100); // Let the desktop compositor present translated and repainted controls.
         Check(NativeMethods.GetForegroundWindow() == form.Handle, "Screenshots must capture the foreground application window.");
         using var bitmap = new Bitmap(form.Width, form.Height);
         using (var graphics = Graphics.FromImage(bitmap))
             graphics.CopyFromScreen(form.Location, Point.Empty, bitmap.Size);
+        bitmap.Save(path, ImageFormat.Png);
         if (form is SettingsForm)
         {
             var controls = new Stack<Control>();
@@ -930,17 +932,21 @@ internal static class Program
             {
                 foreach (Control child in control.Controls) controls.Push(child);
                 if (control is not SettingsToggle toggle || !toggle.Visible) continue;
+                bool hiddenPage = false;
+                for (Control? parent = toggle.Parent; parent is not null; parent = parent.Parent)
+                    if (parent is TabPage page && page.Parent is TabControl tabs && tabs.SelectedTab != page)
+                        hiddenPage = true;
+                if (hiddenPage) continue;
                 var origin = toggle.PointToScreen(Point.Empty) - (Size)form.Location;
                 for (int x = 40 * toggle.DeviceDpi / 96; x < toggle.Width - 2; x += 16)
                 {
                     var point = new Point(origin.X + x, origin.Y);
                     if (new Rectangle(Point.Empty, bitmap.Size).Contains(point))
                         Check(bitmap.GetPixel(point.X, point.Y).ToArgb() == toggle.BackColor.ToArgb(),
-                            "Live checkbox backgrounds must not contain pixels left by other controls.");
+                            $"Live checkbox background differs: {toggle.Text}, pixel {point}, color {bitmap.GetPixel(point.X, point.Y)}.");
                 }
             }
         }
-        bitmap.Save(path, ImageFormat.Png);
     }
 
     private static void TestFrameClock()
