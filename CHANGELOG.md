@@ -8,6 +8,7 @@
 - Soft piano is the default sound at 15% volume. Previously saved sound choices remain unchanged.
 
 ### Fixed
+- Fixed excessive blank space in settings at 200% display scaling by keeping slider rows at their intended height.
 - Prevented GDI+ errors from sub-pixel shortcut indicator arcs at the start of a hold.
 - Deferred initial settings DPI scaling until all controls are assembled.
 - Adjusted dropdown rows and tab headers to enlarged fonts; wrapped long checkbox labels at narrow widths.

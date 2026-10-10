@@ -128,6 +128,7 @@ internal sealed class SettingsSlider : Control
         this.number = number;
         DoubleBuffered = true;
         Height = 28;
+        AutoSize = true;
         Dock = DockStyle.Fill;
         Cursor = Cursors.Hand;
         TabStop = true;
@@ -135,6 +136,7 @@ internal sealed class SettingsSlider : Control
         number.ValueChanged += (_, _) => Invalidate();
         number.EnabledChanged += (_, _) => { Enabled = number.Enabled; Invalidate(); };
     }
+    public override Size GetPreferredSize(Size proposedSize) => new(0, 28 * DeviceDpi / 96);
     protected override void OnPaint(PaintEventArgs e)
     {
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;

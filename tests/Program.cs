@@ -480,6 +480,13 @@ internal static class Program
         menu.Show();
         Application.DoEvents();
         var area = Screen.FromControl(menu).WorkingArea;
+        var sliders = menu.Controls.Find("OptionsLayout", true).Single()
+            .Controls.Cast<Control>().SelectMany(card => card.Controls.Cast<Control>())
+            .SelectMany(content => content.Controls.Cast<Control>())
+            .SelectMany(row => row.Controls.OfType<SettingsSlider>()).ToArray();
+        Check(sliders.Length == 7 && sliders.All(slider => slider.Height <= 40 * menu.DeviceDpi / 96),
+            "Slider rows must remain compact when settings first open at the monitor DPI.");
+        int initialDpi = menu.DeviceDpi;
         var enlargedFonts = new Dictionary<Font, Font>();
         nint bounds = Marshal.AllocHGlobal(16);
         try
@@ -503,9 +510,10 @@ internal static class Program
             foreach (var item in originalFonts)
             {
                 if (!enlargedFonts.TryGetValue(item.Font, out var font))
-                    enlargedFonts.Add(item.Font, font = new Font(item.Font.FontFamily, item.Font.Size * 2, item.Font.Style));
+                    enlargedFonts.Add(item.Font, font = new Font(item.Font.FontFamily, item.Font.Size * 192 / initialDpi, item.Font.Style));
                 item.Control.Font = font;
             }
+            menu.WindowState = FormWindowState.Normal;
             menu.Size = new Size(1280, 800);
             Application.DoEvents();
             var layout = (TableLayoutPanel)menu.Controls.Find("OptionsLayout", true).Single();
